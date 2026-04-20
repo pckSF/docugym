@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
+import shutil
 from typing import Any, Literal, Protocol
 
 import gymnasium as gym
@@ -26,7 +26,7 @@ class Policy(Protocol):
 class RandomAgent:
     """Agent that samples actions directly from the environment action space."""
 
-    def __init__(self, env: gym.Env[Any, Any]) -> None:
+    def __init__(self, env: Any) -> None:
         self._env = env
 
     def act(self, observation: Any) -> Any:

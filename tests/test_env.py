@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 import sys
 import types
-from pathlib import Path
+from typing import cast
 
 import numpy as np
 
@@ -156,22 +157,22 @@ def test_load_sb3_policy_downloads_to_docugym_cache(
         hf_calls.append((repo_id, filename))
         return str(downloaded)
 
-    hf_module.load_from_hub = fake_load_from_hub
+    setattr(hf_module, "load_from_hub", fake_load_from_hub)
 
     sb3_module = types.ModuleType("stable_baselines3")
-    sb3_module.A2C = DummyAlgo
-    sb3_module.DQN = DummyAlgo
-    sb3_module.PPO = DummyAlgo
-    sb3_module.SAC = DummyAlgo
-    sb3_module.TD3 = DummyAlgo
+    setattr(sb3_module, "A2C", DummyAlgo)
+    setattr(sb3_module, "DQN", DummyAlgo)
+    setattr(sb3_module, "PPO", DummyAlgo)
+    setattr(sb3_module, "SAC", DummyAlgo)
+    setattr(sb3_module, "TD3", DummyAlgo)
 
     monkeypatch.setitem(sys.modules, "huggingface_sb3", hf_module)
     monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
     monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
     DummyAlgo.load_calls = []
 
-    first = load_sb3_policy(repo_id=repo_id, filename=filename)
-    second = load_sb3_policy(repo_id=repo_id, filename=filename)
+    first = cast("dict[str, str]", load_sb3_policy(repo_id=repo_id, filename=filename))
+    second = cast("dict[str, str]", load_sb3_policy(repo_id=repo_id, filename=filename))
 
     cache_path = (tmp_path / "cache" / "sb3--ppo-LunarLander-v2" / filename).resolve()
 
