@@ -155,33 +155,33 @@ then start the next. At every stage: *you may deviate if a better approach appea
 
 ### Stage 1 — Scaffolding, config, CI
 
-- Create project `attenbogym/`, `pyproject.toml` with `uv` lock.
-- Add `pydantic-settings`-based config loader (`attenbogym/config.py`) reading
+- Create project `docugym/`, `pyproject.toml` with `uv` lock.
+- Add `pydantic-settings`-based config loader (`docugym/config.py`) reading
   `configs/default.yaml`. See §8 for the schema.
 - Add `pre-commit` with ruff + black; a minimal GitHub Actions workflow running
   `ruff check` + `pytest -q` on Linux.
 - Logging via `structlog` or stdlib `logging` with a friendly format.
-- **DoD:** `uv run attenbo --help` works; config loads from a YAML and env-var
+- **DoD:** `uv run docugym --help` works; config loads from a YAML and env-var
   overrides work.
 
 ### Stage 2 — Gym env wrapper
 
-- Module `attenbogym/env.py`. Factory `make_env(env_id: str, seed: int) -> gym.Env`
+- Module `docugym/env.py`. Factory `make_env(env_id: str, seed: int) -> gym.Env`
   that (a) calls `import ale_py; gym.register_envs(ale_py)` if `env_id` starts with
   `ALE/`, (b) creates the env with `render_mode="rgb_array"`, (c) supports a dict of
   passthrough kwargs (frameskip, sticky actions).
 - Implement a trivial `RandomAgent` and `ScriptedAgent` (e.g., always-go-right for
   MountainCar).
 - Add a loader `load_sb3_policy(repo_id, filename) -> Policy` using
-  `huggingface_sb3.load_from_hub`. Cache to `~/.cache/attenbogym/policies/`.
-- **Smoke test:** `uv run attenbo smoketest --env ALE/SpaceInvaders-v5 --steps 200`
+  `huggingface_sb3.load_from_hub`. Cache to `~/.cache/docugym/policies/`.
+- **Smoke test:** `uv run docugym smoketest --env ALE/SpaceInvaders-v5 --steps 200`
   saves 200 frames to `out/frames/*.png`.
 - **DoD:** At least one classic-control, one Box2D, and one Atari env each produce
   non-black frames; `sb3/ppo-LunarLander-v2` checkpoint loads and plays.
 
 ### Stage 3 — Display layer
 
-- Module `attenbogym/display.py` using PyGame. A class `Display` that owns a window,
+- Module `docugym/display.py` using PyGame. A class `Display` that owns a window,
   pacing `pygame.time.Clock`, a `blit_frame(np.ndarray)` method, a `set_subtitle(str)`
   overlay, and a status bar (env id, step, episode reward).
 - Scale frames to a configurable window size (e.g., 3× for Atari's 160×210).
@@ -201,18 +201,18 @@ then start the next. At every stage: *you may deviate if a better approach appea
       --dtype auto --port 8000
   ```
   (The 0.70 utilization leaves room for Kokoro and Python.)
-- Module `attenbogym/narrator.py`: an async client that takes `(frame: np.ndarray,
+- Module `docugym/narrator.py`: an async client that takes `(frame: np.ndarray,
   context: NarrationContext) -> str`. Encode frame as PNG → base64 → OpenAI-style
   multimodal chat message. Use the prompt template in §7.
 - Start **synchronous**: call narrator once per N frames from the main loop, paint the
   returned text into the subtitle. Measure p50/p95 latency. Target: ≤1.0 s p50.
-- **DoD:** Running `attenbo run --env ALE/Pong-v5 --policy sb3/ppo-PongNoFrameskip-v4
+- **DoD:** Running `docugym run --env ALE/Pong-v5 --policy sb3/ppo-PongNoFrameskip-v4
   --narrate-every 60` prints a plausible Attenborough-style sentence every ~1 s of
   gameplay. It's okay if gameplay visibly stutters — we'll fix that in Stage 6.
 
 ### Stage 5 — Local TTS + streaming audio
 
-- Module `attenbogym/tts.py`. Load Kokoro once:
+- Module `docugym/tts.py`. Load Kokoro once:
   ```python
   from kokoro import KPipeline
   pipe = KPipeline(lang_code='b')   # British English
@@ -271,13 +271,13 @@ then start the next. At every stage: *you may deviate if a better approach appea
 ### Stage 8 — Packaging + CLI + README
 
 - Typer CLI:
-  - `attenbo run --config configs/atari.yaml`
-  - `attenbo run --env ALE/MsPacman-v5 --policy sb3/ppo-MsPacmanNoFrameskip-v4`
-  - `attenbo list-voices` — prints Kokoro's 8 British voices + samples
-  - `attenbo list-envs` — prints supported env presets
+  - `docugym run --config configs/atari.yaml`
+  - `docugym run --env ALE/MsPacman-v5 --policy sb3/ppo-MsPacmanNoFrameskip-v4`
+  - `docugym list-voices` — prints Kokoro's 8 British voices + samples
+  - `docugym list-envs` — prints supported env presets
 - Config presets in `configs/`: `atari.yaml`, `lunarlander.yaml`, `carracing.yaml`.
 - README with a 3-minute quickstart and a troubleshooting section that mirrors §6.
-- **DoD:** Fresh clone + `uv sync` + `scripts/serve_vlm.sh` + `attenbo run
+- **DoD:** Fresh clone + `uv sync` + `scripts/serve_vlm.sh` + `docugym run
   --config configs/atari.yaml` works on a fresh Ubuntu box.
 
 ### Stage 9 (optional) — MP4 recording
@@ -292,7 +292,7 @@ then start the next. At every stage: *you may deviate if a better approach appea
 
 ### Stage 10 (optional) — Tuning & eval
 
-- `attenbo tune prompt --env ... --samples 20` runs 20 narrations over varied frames
+- `docugym tune prompt --env ... --samples 20` runs 20 narrations over varied frames
   and prints them for prompt A/B.
 - Document how to swap in a different voice, change `narration_interval`, or switch
   VLM size.

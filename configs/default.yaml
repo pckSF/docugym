@@ -1,0 +1,49 @@
+run:
+  env_id: "ALE/SpaceInvaders-v5"
+  env_kwargs:
+    frameskip: 4
+    repeat_action_probability: 0.25
+    full_action_space: false
+  seed: 42
+  fps: 60
+  max_episodes: 10
+
+agent:
+  kind: "sb3"
+  sb3_repo_id: "sb3/ppo-SpaceInvadersNoFrameskip-v4"
+  sb3_filename: "ppo-SpaceInvadersNoFrameskip-v4.zip"
+
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+
+narration:
+  interval_seconds: 3.0
+  min_gap_seconds: 1.5
+  reward_spike_threshold: 5.0
+  pixel_delta_threshold: 8.0
+  max_context_events: 3
+  previous_narration_window: 2
+
+tts:
+  engine: "kokoro"
+  kokoro:
+    voice: "bm_george"
+    speed: 0.95
+    sample_rate: 24000
+  xtts:
+    speaker_wav: "data/voices/british_narrator.wav"
+
+display:
+  window_scale: 3
+  subtitle_font: "DejaVu Sans"
+  subtitle_size: 22
+  hud: true
+
+recording:
+  enabled: false
+  out_path: "out/session.mp4"

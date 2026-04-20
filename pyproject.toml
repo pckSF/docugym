@@ -1,9 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
 [project]
 name = "docugym"
 version = "0.1.0"
-description = "soon"
+description = "Local live nature-documentary-style narrator for Gymnasium environments"
 readme = "README.md"
-requires-python = "~=3.12.1"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "pydantic>=2.7,<3",
+  "pydantic-settings>=2.2,<3",
+  "pyyaml>=6.0,<7",
+  "typer>=0.12,<1",
+]
+
+[project.scripts]
+docugym = "docugym.cli:app"
+
+[dependency-groups]
+dev = [
+  "black>=24.10,<26",
+  "pre-commit>=4.0,<5",
+  "pytest>=8.2,<9",
+  "ruff>=0.15,<1",
+]
 
 [tool.black]
 target-version = ['py39', 'py310', 'py311', 'py312']
@@ -151,3 +172,6 @@ strict_equality = true
 show_error_context = false
 show_column_numbers = false
 show_error_codes = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
