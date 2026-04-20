@@ -4,7 +4,7 @@ tags: [stage-2, env, gymnasium, sb3, smoketest]
 created: 2026-04-20
 updated: 2026-04-20
 status: active
-related: [stage-1-scaffolding-and-config-loader.md]
+related: [stage-1-scaffolding-and-config-loader.md, stage-3-display-layer.md]
 ---
 
 # Stage 2 Gym Environment Wrapper and Smoketest
@@ -100,3 +100,4 @@ before async pipeline work.
 ## Changelog
 
 - 2026-04-20: Created.
+- 2026-04-20: Linked follow-on Stage 3 display-layer decision note.

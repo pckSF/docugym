@@ -120,11 +120,12 @@ class AppSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        yaml_path = getattr(settings_cls, "_yaml_path", cls._yaml_path)
         return (
             init_settings,
             env_settings,
             dotenv_settings,
-            YamlConfigSettingsSource(settings_cls, yaml_file=settings_cls._yaml_path),
+            YamlConfigSettingsSource(settings_cls, yaml_file=yaml_path),
             file_secret_settings,
         )
 

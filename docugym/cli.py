@@ -9,6 +9,7 @@ from typing import Any, Literal
 import typer
 
 from docugym.config import AppSettings, load_settings
+from docugym.display import run_display_smoketest
 from docugym.env import run_smoketest
 from docugym.logging_config import configure_logging
 
@@ -148,3 +149,75 @@ def smoketest(
         out_dir,
     )
     typer.echo(f"Saved {len(frame_paths)} frame(s) to {out_dir}")
+
+
+@app.command("display-smoketest")
+def display_smoketest(
+    ctx: typer.Context,
+    env: str | None = typer.Option(None, "--env", help="Gymnasium environment id."),
+    seed: int | None = typer.Option(None, help="Random seed for reset/action space."),
+    fps: int | None = typer.Option(None, min=1, help="Target display FPS."),
+    window_scale: int | None = typer.Option(
+        None,
+        min=1,
+        help="Integer multiplier applied to raw env frame size.",
+    ),
+    steps: int | None = typer.Option(
+        None,
+        min=1,
+        help="Optional max number of displayed steps before exiting.",
+    ),
+    subtitle: str = typer.Option(
+        "In this pixelated arena, every ricochet tells a survival story.",
+        help="Subtitle text rendered over gameplay during Stage 3 display testing.",
+    ),
+    hud: bool | None = typer.Option(
+        None,
+        "--hud/--no-hud",
+        help="Enable or disable HUD status bar overlay.",
+    ),
+    env_kwargs: str | None = typer.Option(
+        None,
+        "--env-kwargs",
+        help="JSON object of extra kwargs passed to gym.make().",
+    ),
+) -> None:
+    """Run the Stage 3 live display loop with a random agent."""
+
+    state = _get_state(ctx)
+    config = state.settings
+
+    env_id = env or config.run.env_id
+    effective_seed = config.run.seed if seed is None else seed
+    effective_fps = config.run.fps if fps is None else fps
+    effective_window_scale = (
+        config.display.window_scale if window_scale is None else window_scale
+    )
+    effective_hud = config.display.hud if hud is None else hud
+
+    effective_env_kwargs: dict[str, Any] = {}
+    if env is None or env_id == config.run.env_id:
+        effective_env_kwargs.update(config.run.env_kwargs)
+    effective_env_kwargs.update(_parse_env_kwargs(env_kwargs))
+
+    rendered_steps = run_display_smoketest(
+        env_id=env_id,
+        seed=effective_seed,
+        fps=effective_fps,
+        window_scale=effective_window_scale,
+        subtitle=subtitle,
+        subtitle_font=config.display.subtitle_font,
+        subtitle_size=config.display.subtitle_size,
+        hud=effective_hud,
+        env_kwargs=effective_env_kwargs,
+        max_steps=steps,
+    )
+
+    logger.info(
+        "Display smoketest complete: env=%s rendered_steps=%d fps=%d scale=%d",
+        env_id,
+        rendered_steps,
+        effective_fps,
+        effective_window_scale,
+    )
+    typer.echo(f"Rendered {rendered_steps} frame(s) in live display mode")
