@@ -2,12 +2,15 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/python
 {
 	// Container system settings
-	"name": "fsem-dev",
+	"name": "docugym-dev",
 	"dockerComposeFile": ["../docker-compose.yaml"],
 	"runServices": ["dev"],
 	"service": "dev",
 	"workspaceFolder": "/app",
 	"remoteUser": "devuser",
+	"remoteEnv": {
+		"UV_PROJECT_ENVIRONMENT": "/home/devuser/.venv"
+	},
 	"shutdownAction": "stopCompose",
 	"features": {
 		"ghcr.io/devcontainer-community/devcontainer-features/atuin.sh:1": {}
@@ -28,10 +31,7 @@
 				"tamasfe.even-better-toml"
 			],
 			"settings": {
-				"python.defaultInterpreterPath": "/home/devuser/.venv/bin/python",
-				"dotfiles.repository": "git@github.com:pckSF/dotfiles.git",
-				"dotfiles.targetPath": "~/.dotfiles",
-				"dotfiles.installCommand": "setup"
+				"python.defaultInterpreterPath": "/home/devuser/.venv/bin/python"
 			}
 		}
 	}

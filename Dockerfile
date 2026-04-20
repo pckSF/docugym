@@ -39,6 +39,7 @@ USER devuser
 # Activate the venv for all subsequent layers and at runtime.
 # Placed in home dir so the .:/app bind mount in Compose doesn't shadow it.
 ENV VIRTUAL_ENV=/home/devuser/.venv \
+    UV_PROJECT_ENVIRONMENT=/home/devuser/.venv \
     PATH="/home/devuser/.venv/bin:/home/devuser/.local/bin:${PATH}"
 RUN --mount=type=bind,src=requirements.txt,target=requirements.txt \
     --mount=type=cache,gid=${GROUP_ID},uid=${USER_ID},target=/home/devuser/.cache/uv \
@@ -77,6 +78,7 @@ USER devuser
 
 COPY --from=dev /home/devuser/.venv /home/devuser/.venv
 ENV VIRTUAL_ENV=/home/devuser/.venv \
+    UV_PROJECT_ENVIRONMENT=/home/devuser/.venv \
     PATH="/home/devuser/.venv/bin:/home/devuser/.local/bin:${PATH}"
 
 ENTRYPOINT [ "python" ]

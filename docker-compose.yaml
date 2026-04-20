@@ -9,6 +9,8 @@ services:
     image: docugym-dev:latest
     container_name: docugym-dev
     hostname: docugym-dev
+    environment:
+      UV_PROJECT_ENVIRONMENT: /home/devuser/.venv
     security_opt:           #
       - seccomp=unconfined  #
     ipc: host               # These settings are okay to use in a local devcontainer
@@ -33,6 +35,8 @@ services:
     image: docugym-run:latest
     container_name: docugym-run
     hostname: docugym-run
+    environment:
+      UV_PROJECT_ENVIRONMENT: /home/devuser/.venv
     volumes:
       - .:/app
     working_dir: /app
