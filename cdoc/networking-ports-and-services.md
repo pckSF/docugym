@@ -4,7 +4,7 @@ tags: [networking, ports, services, infra]
 created: 2026-04-20
 updated: 2026-04-20
 status: active
-related: [stage-3-display-layer.md, security-audit-and-risk-register.md]
+related: [stage-3-display-layer.md, security-audit-and-risk-register.md, devcontainer-security-settings-review.md]
 ---
 
 # Networking Ports and Services
@@ -61,3 +61,4 @@ what should be called, and which links are currently only planned.
 
 - 2026-04-20: Created.
 - 2026-04-20: Linked rolling security audit reference note.
+- 2026-04-20: Linked devcontainer security settings decision note.

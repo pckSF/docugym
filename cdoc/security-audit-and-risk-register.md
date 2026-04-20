@@ -4,7 +4,7 @@ tags: [security, audit, risk, supply-chain]
 created: 2026-04-20
 updated: 2026-04-20
 status: active
-related: [networking-ports-and-services.md]
+related: [networking-ports-and-services.md, devcontainer-security-settings-review.md]
 ---
 
 # Security Audit and Risk Register
@@ -39,9 +39,11 @@ networking assumptions change.
 
 ### Medium-priority findings
 
-- Development container weakens isolation with `seccomp=unconfined` and `ipc: host`.
-  - Location: `docker-compose.yaml` (`dev` service).
-  - Why it matters: increased blast radius if malicious code executes in container.
+- Writable source bind mount (`.:/app`) allows repository modification from inside
+  the dev container.
+  - Location: `docker-compose.yaml` (`dev` and `runp` services).
+  - Why it matters: if malicious code executes in-container, it can alter
+    host-side repository files through the bind mount.
   - Potential malware source: compromised dependency, malicious downloaded artifact,
     or unsafe developer command in container session.
   - Confidence: `confident`.
@@ -76,13 +78,16 @@ networking assumptions change.
 ## Changelog
 
 - 2026-04-20: Created initial rolling audit with severity-ranked findings.
+- 2026-04-20: Updated after hardening compose defaults (removed unconfined seccomp and host IPC).
 
 ## Tasks Derived From Findings
 
 - [ ] Add trust controls for SB3 model loading (allowlist trusted repos, warn on
   untrusted repo ids, and document deserialization risk explicitly in CLI help).
-- [ ] Provide a hardened compose profile that avoids `seccomp=unconfined` and
-  `ipc: host` by default, with opt-in overrides only when required.
+- [x] Harden compose defaults by removing `seccomp=unconfined` and `ipc: host`
+  from default services.
+- [ ] If needed later, add an explicit opt-in override profile for exceptional
+  debug/perf workflows requiring weaker isolation.
 - [ ] Strengthen supply-chain controls (prefer lock-driven installs and add
   automated `pip-audit` or equivalent in CI).
 - [ ] Pin GitHub Actions and pre-commit third-party hooks to immutable commit SHAs,
