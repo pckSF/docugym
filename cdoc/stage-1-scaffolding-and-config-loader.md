@@ -4,7 +4,7 @@ tags: [scaffolding, config, ci, stage-1]
 created: 2026-04-20
 updated: 2026-04-20
 status: active
-related: []
+related: [stage-2-gym-env-wrapper-and-smoketest.md]
 ---
 
 # Stage 1 Scaffolding and Config Loader
@@ -81,3 +81,4 @@ handling with less custom parsing code.
 
 - 2026-04-20: Created.
 - 2026-04-20: Updated project naming references to docugym.
+- 2026-04-20: Linked follow-on Stage 2 decision note.
