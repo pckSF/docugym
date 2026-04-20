@@ -1,16 +1,11 @@
 # venvs
-.fsem_venv/
+.venv/
 
 # logs and caches
 __pycache__/
+.pytest_cache/
 .mypy_cache/
 .ruff_cache/
-logs/
-MUJOCO_LOG.TXT
-
-# data
-data
-data/
 
 # MacOS
 .DS_Store
