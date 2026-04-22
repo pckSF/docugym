@@ -2,9 +2,9 @@
 type: reference
 tags: [security, audit, risk, supply-chain]
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-04-22
 status: active
-related: [networking-ports-and-services.md, devcontainer-security-settings-review.md]
+related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md]
 ---
 
 # Security Audit and Risk Register
@@ -55,11 +55,11 @@ networking assumptions change.
   - Potential malware source: Python package index or transitive dependency takeover.
   - Confidence: `confident`.
 
-- CI and tool bootstrap actions are not commit-SHA pinned.
-  - Location: `.github/workflows/ci.yml` and `.pre-commit-config.yaml`.
+- Local pre-commit third-party hooks are not commit-SHA pinned.
+  - Location: `.pre-commit-config.yaml`.
   - Why it matters: tag drift or compromised upstream release can change code
-    executed in CI or local hooks.
-  - Potential malware source: third-party GitHub Action or hook repository compromise.
+    executed in local developer hook flows.
+  - Potential malware source: third-party hook repository compromise.
   - Confidence: `likely`.
 
 ### Low-priority findings
@@ -74,11 +74,15 @@ networking assumptions change.
 
 - No host ports are currently published in `docker-compose.yaml` for `dev`/`runp`.
 - Default runtime uses non-root user (`devuser`) in container stages.
+- CI workflow actions in `.github/workflows/ci.yml` are pinned to full commit
+  SHAs with same-line version comments.
 
 ## Changelog
 
 - 2026-04-20: Created initial rolling audit with severity-ranked findings.
 - 2026-04-20: Updated after hardening compose defaults (removed unconfined seccomp and host IPC).
+- 2026-04-22: Updated after CI workflow action SHA pinning; narrowed remaining
+  action/tooling pinning risk to local pre-commit hooks.
 
 ## Tasks Derived From Findings
 
@@ -90,5 +94,9 @@ networking assumptions change.
   debug/perf workflows requiring weaker isolation.
 - [ ] Strengthen supply-chain controls (prefer lock-driven installs and add
   automated `pip-audit` or equivalent in CI).
-- [ ] Pin GitHub Actions and pre-commit third-party hooks to immutable commit SHAs,
-  with scheduled update process.
+- [x] Pin GitHub Actions in `.github/workflows/ci.yml` to immutable commit SHAs
+  with same-line version comments.
+- [ ] Pin pre-commit third-party hooks to immutable commit SHAs, with scheduled
+  update process.
+- [ ] Enable repository or organization policy requiring full-length SHA pinning
+  for GitHub Actions.
