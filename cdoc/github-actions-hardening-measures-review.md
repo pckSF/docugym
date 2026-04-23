@@ -124,6 +124,17 @@ Deferred as tracked follow-up tasks:
 - Add dependency update automation with cooldown policy (Dependabot or Renovate).
 - Evaluate `actionlint` integration (preferably with `shellcheck`).
 
+### Follow-up Completion (2026-04-23)
+
+The deferred follow-up tasks were completed in a subsequent hardening pass:
+
+- Added `.github/dependabot.yml` with cooldown policy for
+  `github-actions` and `uv` ecosystems.
+- Added `actionlint` integration via pre-commit (`actionlint-docker`) with
+  immutable SHA pinning.
+- Added dedicated `.github/workflows/zizmor.yml` workflow using
+  `zizmorcore/zizmor-action` for CI-based security scanning and SARIF upload.
+
 ## Pre-Mortem
 
 - The pinned SHAs could become stale and miss upstream fixes.
@@ -138,3 +149,5 @@ Deferred as tracked follow-up tasks:
 
 - 2026-04-23: Created decision note and implemented phased hardening step 1
   (`zizmor` pre-commit + immutable SHA pinning for third-party pre-commit hooks).
+- 2026-04-23: Completed follow-up implementation for dependency cooldown
+  automation, `actionlint` integration, and dedicated zizmor CI workflow.

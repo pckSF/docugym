@@ -57,13 +57,6 @@ networking assumptions change.
   - Potential malware source: Python package index or transitive dependency takeover.
   - Confidence: `likely`.
 
-- No dependency update bot/cooldown policy is configured.
-  - Location: missing `.github/dependabot.yml` or Renovate configuration.
-  - Why it matters: automated or manual dependency updates may adopt newly
-    published compromised releases before ecosystem takedowns occur.
-  - Potential malware source: newly published compromised package or action release.
-  - Confidence: `likely`.
-
 ### Low-priority findings
 
 - `uvx` bootstrap for `ty` in pre-commit executes an externally fetched tool.
@@ -83,8 +76,13 @@ networking assumptions change.
   (`persist-credentials: false`).
 - Third-party pre-commit hooks in `.pre-commit-config.yaml` are pinned to full
   commit SHAs with same-line version comments.
+- `actionlint` is integrated in pre-commit via `actionlint-docker`.
 - `zizmor` is integrated as a pre-commit hook for local GitHub Actions security
   analysis.
+- Dedicated `.github/workflows/zizmor.yml` runs zizmor in CI for GitHub Actions
+  security scanning with SARIF upload.
+- Dependabot version update automation is configured with cooldown policy in
+  `.github/dependabot.yml` for `github-actions` and `uv` ecosystems.
 - `requirements.txt` is exported from `uv.lock` with pinned versions and
   SHA-256 hashes, and omits editable project emission to preserve Docker
   bootstrap behavior.
@@ -101,6 +99,8 @@ networking assumptions change.
   replaced resolved local hook pinning finding with dependency cooldown policy gap.
 - 2026-04-23: Updated after CI workflow least-privilege hardening surfaced by
   `zizmor` (`permissions` scope and checkout credential persistence).
+- 2026-04-23: Updated after adding Dependabot cooldown policy, `actionlint`
+  pre-commit integration, and dedicated zizmor CI workflow.
 
 ## Tasks Derived From Findings
 
@@ -122,7 +122,9 @@ networking assumptions change.
   for GitHub Actions.
 - [ ] Add a CI check that fails if `requirements.txt` drifts from
   `uv export --format requirements.txt --group dev --no-emit-project --locked`.
-- [ ] Add dependency update automation with cooldown policy (Dependabot or
+- [x] Add dependency update automation with cooldown policy (Dependabot or
   Renovate) for at least `github-actions` and `uv`/`pip` ecosystems.
-- [ ] Evaluate and integrate `actionlint` (preferably with `shellcheck`) as a
+- [x] Evaluate and integrate `actionlint` (preferably with `shellcheck`) as a
   complementary workflow linter.
+- [x] Add dedicated zizmor CI workflow for ongoing GitHub Actions security
+  scanning and SARIF upload.
