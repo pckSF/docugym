@@ -4,7 +4,7 @@ tags: [security, audit, risk, supply-chain]
 created: 2026-04-20
 updated: 2026-04-23
 status: active
-related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md]
+related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md, betterleaks-secret-scanning-evaluation-and-tuning.md]
 ---
 
 # Security Audit and Risk Register
@@ -79,6 +79,9 @@ networking assumptions change.
 - `actionlint` is integrated in pre-commit via `actionlint-docker`.
 - `zizmor` is integrated as a pre-commit hook for local GitHub Actions security
   analysis.
+- `betterleaks` is integrated as a pre-commit hook, with `.betterleaks.toml`
+  using path-scoped and line-targeted `AND` allowlists to reduce deterministic
+  hash-pinning false positives while retaining default detectors.
 - Dedicated `.github/workflows/zizmor.yml` runs zizmor in CI for GitHub Actions
   security scanning with SARIF upload.
 - Dependabot version update automation is configured with cooldown policy in
@@ -101,6 +104,8 @@ networking assumptions change.
   `zizmor` (`permissions` scope and checkout credential persistence).
 - 2026-04-23: Updated after adding Dependabot cooldown policy, `actionlint`
   pre-commit integration, and dedicated zizmor CI workflow.
+- 2026-04-23: Updated after Betterleaks integration and `.betterleaks.toml`
+  tuning for strict, context-scoped false-positive suppression.
 
 ## Tasks Derived From Findings
 
@@ -128,3 +133,5 @@ networking assumptions change.
   complementary workflow linter.
 - [x] Add dedicated zizmor CI workflow for ongoing GitHub Actions security
   scanning and SARIF upload.
+- [x] Evaluate and integrate Betterleaks as a pre-commit secret scanner with
+  scoped tuning for deterministic hash-pinning patterns.

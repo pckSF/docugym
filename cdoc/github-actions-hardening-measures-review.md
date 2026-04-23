@@ -4,7 +4,7 @@ tags: [security, ci, github-actions, supply-chain, pre-commit]
 created: 2026-04-23
 updated: 2026-04-23
 status: active
-related: [github-actions-immutable-pinning.md, security-audit-and-risk-register.md]
+related: [github-actions-immutable-pinning.md, security-audit-and-risk-register.md, betterleaks-secret-scanning-evaluation-and-tuning.md]
 ---
 
 # GitHub Actions Hardening Measures Review

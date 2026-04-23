@@ -1,0 +1,25 @@
+title = "DocuGym Betterleaks tuning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Allow hash-pinned Python dependency lines in requirements export"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^requirements\.txt$''']
+regexes = ['''^\s*--hash=sha256:[a-f0-9]{64}\s*(\\)?\s*$''']
+
+[[allowlists]]
+description = "Allow immutable action SHA pinning in GitHub workflow uses lines"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^\.github/workflows/.*\.ya?ml$''']
+regexes = ['''^\s*uses:\s*[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*@[a-f0-9]{40}(\s*#.*)?\s*$''']
+
+[[allowlists]]
+description = "Allow immutable pre-commit hook rev SHA pinning lines"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^\.pre-commit-config\.yaml$''']
+regexes = ['''^\s*rev:\s*[a-f0-9]{40}(\s*#.*)?\s*$''']
