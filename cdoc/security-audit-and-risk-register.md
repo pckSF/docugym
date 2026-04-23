@@ -2,9 +2,9 @@
 type: reference
 tags: [security, audit, risk, supply-chain]
 created: 2026-04-20
-updated: 2026-04-22
+updated: 2026-04-23
 status: active
-related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md]
+related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md]
 ---
 
 # Security Audit and Risk Register
@@ -57,11 +57,11 @@ networking assumptions change.
   - Potential malware source: Python package index or transitive dependency takeover.
   - Confidence: `likely`.
 
-- Local pre-commit third-party hooks are not commit-SHA pinned.
-  - Location: `.pre-commit-config.yaml`.
-  - Why it matters: tag drift or compromised upstream release can change code
-    executed in local developer hook flows.
-  - Potential malware source: third-party hook repository compromise.
+- No dependency update bot/cooldown policy is configured.
+  - Location: missing `.github/dependabot.yml` or Renovate configuration.
+  - Why it matters: automated or manual dependency updates may adopt newly
+    published compromised releases before ecosystem takedowns occur.
+  - Potential malware source: newly published compromised package or action release.
   - Confidence: `likely`.
 
 ### Low-priority findings
@@ -78,6 +78,13 @@ networking assumptions change.
 - Default runtime uses non-root user (`devuser`) in container stages.
 - CI workflow actions in `.github/workflows/ci.yml` are pinned to full commit
   SHAs with same-line version comments.
+- CI workflow uses explicit least-privilege token scope (`permissions:
+  contents: read`) and disables checkout credential persistence
+  (`persist-credentials: false`).
+- Third-party pre-commit hooks in `.pre-commit-config.yaml` are pinned to full
+  commit SHAs with same-line version comments.
+- `zizmor` is integrated as a pre-commit hook for local GitHub Actions security
+  analysis.
 - `requirements.txt` is exported from `uv.lock` with pinned versions and
   SHA-256 hashes, and omits editable project emission to preserve Docker
   bootstrap behavior.
@@ -90,6 +97,10 @@ networking assumptions change.
   action/tooling pinning risk to local pre-commit hooks.
 - 2026-04-22: Updated after moving `requirements.txt` to lock-derived, hashed
   export from `uv.lock`; narrowed dependency supply-chain risk to bypass flows.
+- 2026-04-23: Updated after pre-commit hook SHA pinning and `zizmor` integration;
+  replaced resolved local hook pinning finding with dependency cooldown policy gap.
+- 2026-04-23: Updated after CI workflow least-privilege hardening surfaced by
+  `zizmor` (`permissions` scope and checkout credential persistence).
 
 ## Tasks Derived From Findings
 
@@ -105,9 +116,13 @@ networking assumptions change.
   with same-line version comments.
 - [x] Export `requirements.txt` from `uv.lock` with pinned versions and
   `--hash=sha256` entries (`uv export ... --no-emit-project`).
-- [ ] Pin pre-commit third-party hooks to immutable commit SHAs, with scheduled
+- [x] Pin pre-commit third-party hooks to immutable commit SHAs, with scheduled
   update process.
 - [ ] Enable repository or organization policy requiring full-length SHA pinning
   for GitHub Actions.
 - [ ] Add a CI check that fails if `requirements.txt` drifts from
   `uv export --format requirements.txt --group dev --no-emit-project --locked`.
+- [ ] Add dependency update automation with cooldown policy (Dependabot or
+  Renovate) for at least `github-actions` and `uv`/`pip` ecosystems.
+- [ ] Evaluate and integrate `actionlint` (preferably with `shellcheck`) as a
+  complementary workflow linter.

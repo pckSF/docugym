@@ -2,9 +2,9 @@
 type: decision
 tags: [security, ci, github-actions, supply-chain]
 created: 2026-04-22
-updated: 2026-04-22
+updated: 2026-04-23
 status: active
-related: [security-audit-and-risk-register.md]
+related: [security-audit-and-risk-register.md, github-actions-hardening-measures-review.md]
 ---
 
 # GitHub Actions Immutable Pinning
@@ -101,3 +101,4 @@ same-line version comments:
 
 - 2026-04-22: Created decision note and applied SHA pinning with version
   comments in CI workflow.
+- 2026-04-23: Linked follow-on hardening review decision note.
