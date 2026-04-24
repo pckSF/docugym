@@ -46,3 +46,27 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  autid:
+    image: python:3.12-alpine
+    container_name: docugym-autid
+    hostname: docugym-autid
+    working_dir: /app
+    environment:
+      HOME: /tmp
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_CACHE_DIR: "1"
+      PATH: /tmp/.local/bin:/usr/local/bin:/usr/bin:/bin
+    volumes:
+      - .:/app:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        python -m pip install --user pip-audit && \
+        python -m pip_audit --require-hashes -r requirements.txt

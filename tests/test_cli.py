@@ -316,3 +316,149 @@ run:
 
     assert result.exit_code == 0
     assert captured["env_kwargs"] == {}
+
+
+def test_run_command_invokes_stage4_runner(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+  env_id: "ALE/Pong-v5"
+  env_kwargs:
+    frameskip: 4
+  seed: 21
+  fps: 60
+agent:
+  kind: "random"
+  sb3_repo_id: "sb3/ppo-SpaceInvadersNoFrameskip-v4"
+  sb3_filename: "ppo-SpaceInvadersNoFrameskip-v4.zip"
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+display:
+  window_scale: 3
+  min_window_width: 960
+  subtitle_font: "DejaVu Sans"
+  subtitle_size: 22
+  subtitle_max_text_width: 960
+  hud: true
+  text_bands: true
+""",
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeNarrator:
+        def __init__(self, **kwargs: object) -> None:
+            captured["narrator_init"] = kwargs
+
+        def wait_until_ready_sync(self, **kwargs: object) -> bool:
+            captured["wait_kwargs"] = kwargs
+            return True
+
+    class FakeResult:
+        rendered_steps = 10
+        narration_count = 2
+        latency_p50_ms = 850.0
+        latency_p95_ms = 1200.0
+
+    def fake_run_stage4_session(**kwargs: object) -> FakeResult:
+        captured.update(kwargs)
+        return FakeResult()
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+    monkeypatch.setattr("docugym.cli.run_stage4_session", fake_run_stage4_session)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "run",
+            "--steps",
+            "10",
+            "--narrate-every",
+            "5",
+            "--wait-for-vlm",
+            "--wait-timeout",
+            "3",
+            "--env-kwargs",
+            '{"repeat_action_probability": 0.1}',
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["env_id"] == "ALE/Pong-v5"
+    assert captured["seed"] == 21
+    assert captured["fps"] == 60
+    assert captured["narrate_every"] == 5
+    assert captured["agent_kind"] == "random"
+    assert captured["env_kwargs"] == {
+        "frameskip": 4,
+        "repeat_action_probability": 0.1,
+    }
+    assert captured["wait_kwargs"] == {"timeout_seconds": 3.0}
+
+
+def test_run_policy_shorthand_implies_sb3(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+  env_id: "ALE/Pong-v5"
+agent:
+  kind: "random"
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+""",
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeNarrator:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    class FakeResult:
+        rendered_steps = 1
+        narration_count = 0
+        latency_p50_ms = None
+        latency_p95_ms = None
+
+    def fake_run_stage4_session(**kwargs: object) -> FakeResult:
+        captured.update(kwargs)
+        return FakeResult()
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+    monkeypatch.setattr("docugym.cli.run_stage4_session", fake_run_stage4_session)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "run",
+            "--policy",
+            "sb3/ppo-PongNoFrameskip-v4",
+            "--steps",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["agent_kind"] == "sb3"
+    assert captured["sb3_repo_id"] == "sb3/ppo-PongNoFrameskip-v4"
+    assert captured["sb3_filename"] == "ppo-PongNoFrameskip-v4.zip"
