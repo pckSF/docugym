@@ -2,9 +2,9 @@
 type: decision
 tags: [stage-2, env, gymnasium, sb3, smoketest]
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-04-24
 status: active
-related: [stage-1-scaffolding-and-config-loader.md, stage-3-display-layer.md]
+related: [stage-1-scaffolding-and-config-loader.md, stage-3-display-layer.md, 2026-04-24-ci-pytest-smoketest-invalid-env-kwargs-assertion-failure.md]
 ---
 
 # Stage 2 Gym Environment Wrapper and Smoketest
@@ -101,3 +101,4 @@ before async pipeline work.
 
 - 2026-04-20: Created.
 - 2026-04-20: Linked follow-on Stage 3 display-layer decision note.
+- 2026-04-24: Linked CI pytest log covering brittle invalid-JSON CLI output assertion failure.

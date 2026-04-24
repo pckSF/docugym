@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from typer.testing import CliRunner
 
@@ -82,7 +83,9 @@ def test_smoketest_rejects_invalid_env_kwargs(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "--env-kwargs must be valid JSON" in result.output
+    plain_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+    assert "env-kwargs" in plain_output
+    assert "valid JSON" in plain_output
 
 
 def test_smoketest_env_override_drops_default_env_kwargs(
