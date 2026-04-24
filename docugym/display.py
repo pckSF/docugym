@@ -97,7 +97,9 @@ class Display:
             frame_width * self._window_scale,
             frame_height * self._window_scale,
         )
-        hud_band_height = self._status_bar_height() if self._hud and self._text_bands else 0
+        hud_band_height = (
+            self._status_bar_height() if self._hud and self._text_bands else 0
+        )
         subtitle_band_height = (
             self._subtitle_band_height() if self._subtitle and self._text_bands else 0
         )

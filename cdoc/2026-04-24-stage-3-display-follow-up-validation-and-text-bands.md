@@ -57,7 +57,21 @@ occlusion concerns on busy gameplay scenes.
     dedicated non-overlay HUD/subtitle bands, and readable subtitle width on a
     noisy background.
 
+### GitHub Actions CI repair after width-policy changes
+
+- Observed failure mode:
+  - CI `ruff check` failed on a line-length violation introduced in
+    `docugym/display.py` during the width-policy implementation cycle.
+- Fix applied:
+  - Reformatted the offending assignment to satisfy repository Ruff/format
+    constraints.
+- Verification evidence:
+  - `pre-commit run --all-files` passed.
+  - `uv run ruff check .` passed.
+  - `uv run pytest -q` passed (`21 passed`).
+
 ## Changelog
 
 - 2026-04-24: Created.
 - 2026-04-24: Recorded visual verification rerun pass for centered-frame and capped subtitle width behavior.
+- 2026-04-24: Added CI repair note for post-rollout Ruff failure and successful local gate rerun.
