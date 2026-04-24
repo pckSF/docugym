@@ -4,7 +4,7 @@ tags: [stage-3, testing, display, ubuntu, pygame, readability]
 created: 2026-04-24
 updated: 2026-04-24
 status: active
-related: [stage-3-display-layer.md, 2026-04-24-stage-3-real-ubuntu-display-results.md]
+related: [stage-3-display-layer.md, 2026-04-24-stage-3-real-ubuntu-display-results.md, stage-3-display-min-width-and-subtitle-width-policy.md]
 ---
 
 # 2026-04-24 Stage 3 Display Follow-Up Validation And Text Bands
@@ -46,6 +46,18 @@ occlusion concerns on busy gameplay scenes.
 - Set repository default to `display.text_bands: true`.
 - Regression status after implementation: `17 passed` in `pytest -q`.
 
+### Visual verification rerun after width-policy rollout
+
+- SpaceInvaders verification command:
+  - `uv run --active docugym display-smoketest --env ALE/SpaceInvaders-v5 --fps 60 --steps 10000 --subtitle "Visual verification: centered frame and capped subtitle width" --min-window-width 960 --subtitle-max-text-width 900 --text-bands`
+- Outcome evidence:
+  - Completed cleanly with `rendered_steps=2099`, consistent with manual
+    interactive termination before max steps.
+  - Human verification result: **pass** for centered narrow frame layout,
+    dedicated non-overlay HUD/subtitle bands, and readable subtitle width on a
+    noisy background.
+
 ## Changelog
 
 - 2026-04-24: Created.
+- 2026-04-24: Recorded visual verification rerun pass for centered-frame and capped subtitle width behavior.
