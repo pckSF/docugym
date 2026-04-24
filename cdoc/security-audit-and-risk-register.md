@@ -2,7 +2,7 @@
 type: reference
 tags: [security, audit, risk, supply-chain]
 created: 2026-04-20
-updated: 2026-04-23
+updated: 2026-04-24
 status: active
 related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md, betterleaks-secret-scanning-evaluation-and-tuning.md]
 ---
@@ -23,6 +23,24 @@ networking assumptions change.
 - Keep findings grouped by severity, with each item carrying a confidence label.
 - Move resolved findings to archived notes only when their risk is fully removed.
 - Keep tasks at the end of this file synchronized with current findings.
+
+### Delta review (since last audit update)
+
+- Baseline used: commit `58978c9` (2026-04-23), the last commit that changed
+  this rolling audit.
+- Scope reviewed: `docker-compose.yaml`, `scripts/serve_vlm.sh`,
+  `docugym/narrator.py`, `docugym/runtime.py`, `docugym/cli.py`,
+  `pyproject.toml`, `requirements.txt`, and `uv.lock`.
+- Verification gap: host shell in this session lacked `uv`/`uvx` and
+  `pip-audit`, so this increment is a configuration/code-diff audit rather than
+  an executed vulnerability scanner run.
+- Security-profile changes observed:
+  - Added new `audit` compose service with tighter runtime controls:
+    `read_only: true`, `tmpfs: /tmp`, `security_opt:
+    no-new-privileges:true`, and a read-only source mount (`.:/app:ro`).
+  - No Docker Compose `profiles:` entries were added or changed.
+  - Existing `dev`/`runp` service isolation posture is unchanged from
+    2026-04-23 (still writable bind mount `.:/app`).
 
 ### Critical findings
 
@@ -57,6 +75,16 @@ networking assumptions change.
   - Potential malware source: Python package index or transitive dependency takeover.
   - Confidence: `likely`.
 
+- VLM sidecar launch script does not explicitly constrain bind interface.
+  - Location: `scripts/serve_vlm.sh` (`vllm serve ... --port ...` with no
+    explicit host flag).
+  - Why it matters: endpoint exposure depends on vLLM defaults and host
+    networking context; if it binds broadly, generated frame data could be
+    requested from outside localhost.
+  - Potential malware source: opportunistic access from other local-network
+    systems when host firewalling is weak/misconfigured.
+  - Confidence: `likely`.
+
 ### Low-priority findings
 
 - `uvx` bootstrap for `ty` in pre-commit executes an externally fetched tool.
@@ -89,6 +117,18 @@ networking assumptions change.
 - `requirements.txt` is exported from `uv.lock` with pinned versions and
   SHA-256 hashes, and omits editable project emission to preserve Docker
   bootstrap behavior.
+- Stage 4 adds `httpx` runtime usage, and the dependency chain (`httpx`,
+  `httpcore`, `anyio`, `h11`) is captured in lock-derived, hash-pinned
+  `requirements.txt`.
+- A dedicated `audit` service runs dependency vulnerability checks in a more
+  restricted container context (`read_only`, `tmpfs`, `no-new-privileges`, and
+  read-only source mount).
+- `audit` now uses a dedicated Docker build target with digest-pinned
+  Chainguard Python base
+  (`cgr.dev/chainguard/python@sha256:18a4fbda8c280978b6aa5329f7acd4dbb106876e76fdc87913855ebf4876f2ff`,
+  Python 3.14.4, verified 2026-04-24)
+  and pinned audit tool version (`pip-audit==2.9.0`), removing runtime tool
+  bootstrap.
 
 ## Changelog
 
@@ -106,6 +146,17 @@ networking assumptions change.
   pre-commit integration, and dedicated zizmor CI workflow.
 - 2026-04-23: Updated after Betterleaks integration and `.betterleaks.toml`
   tuning for strict, context-scoped false-positive suppression.
+- 2026-04-24: Audited post-Stage 4 changes since commit `58978c9`; documented
+  new `audit` service hardening controls, sidecar binding exposure, and runtime
+  `pip-audit` bootstrap supply-chain tradeoff.
+- 2026-04-24: Updated after pinning `audit` to a dedicated build target with
+  pinned base image tag and pinned `pip-audit` version; removed runtime
+  `pip install` bootstrap from compose execution.
+- 2026-04-24: Updated `audit` base to a digest-pinned Chainguard Python image
+  to reduce known container vulnerabilities reported by image linting.
+- 2026-04-24: Refreshed Chainguard Python digest from `sha256:2c0fbbac…` to
+  `sha256:18a4fbda…` (Python 3.14.4) after linter flagged outdated digest;
+  verified via `docker pull cgr.dev/chainguard/python:latest`.
 
 ## Tasks Derived From Findings
 
@@ -117,6 +168,10 @@ networking assumptions change.
   debug/perf workflows requiring weaker isolation.
 - [ ] Strengthen supply-chain controls (prefer lock-driven installs and add
   automated `pip-audit` or equivalent in CI).
+- [ ] Constrain VLM sidecar bind interface by default (for example,
+  `--host 127.0.0.1`) and document explicit opt-in for broader exposure.
+- [x] Replace runtime `pip install --user pip-audit` in `audit` with a pinned
+  and reproducible audit tool path (for example, baked image or pinned artifact).
 - [x] Pin GitHub Actions in `.github/workflows/ci.yml` to immutable commit SHAs
   with same-line version comments.
 - [x] Export `requirements.txt` from `uv.lock` with pinned versions and

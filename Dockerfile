@@ -83,3 +83,19 @@ ENV VIRTUAL_ENV=/home/devuser/.venv \
 
 ENTRYPOINT [ "python" ]
 CMD ["--help"]
+
+
+FROM cgr.dev/chainguard/python@sha256:18a4fbda8c280978b6aa5329f7acd4dbb106876e76fdc87913855ebf4876f2ff AS audit
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PATH="/home/nonroot/.local/bin:${PATH}"
+
+RUN python -m pip install --user --no-cache-dir "pip-audit==2.9.0"
+
+WORKDIR /app
+
+ENTRYPOINT ["python", "-m", "pip_audit"]
+CMD ["--help"]
