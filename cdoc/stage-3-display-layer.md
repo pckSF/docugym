@@ -4,7 +4,7 @@ tags: [stage-3, display, pygame, ui]
 created: 2026-04-20
 updated: 2026-04-24
 status: active
-related: [stage-2-gym-env-wrapper-and-smoketest.md, 2026-04-24-stage-3-real-ubuntu-display-results.md, networking-ports-and-services.md]
+related: [stage-2-gym-env-wrapper-and-smoketest.md, 2026-04-24-stage-3-real-ubuntu-display-results.md, 2026-04-24-stage-3-display-follow-up-validation-and-text-bands.md, stage-3-display-min-width-and-subtitle-width-policy.md, networking-ports-and-services.md]
 ---
 
 # Stage 3 Display Layer
@@ -99,3 +99,5 @@ rendering needed for later narration integration.
 - 2026-04-20: Linked temporary open task for real-Ubuntu manual display validation.
 - 2026-04-20: Linked networking reference note for active and planned service ports.
 - 2026-04-24: Linked native Ubuntu Stage 3 validation results log and closed temporary open task tracking.
+- 2026-04-24: Linked follow-up Ubuntu validation and text-band readability mitigation log.
+- 2026-04-24: Linked minimum-width and subtitle-width decision note for narrow/wide env readability balancing.

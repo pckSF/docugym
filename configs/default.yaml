@@ -40,9 +40,12 @@ tts:
 
 display:
   window_scale: 3
+  min_window_width: 960
   subtitle_font: "DejaVu Sans"
   subtitle_size: 22
+  subtitle_max_text_width: 960
   hud: true
+  text_bands: true
 
 recording:
   enabled: false

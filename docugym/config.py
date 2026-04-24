@@ -80,9 +80,12 @@ class DisplaySettings(BaseModel):
     """Window and subtitle rendering settings."""
 
     window_scale: int = 3
+    min_window_width: int = 960
     subtitle_font: str = "DejaVu Sans"
     subtitle_size: int = 22
+    subtitle_max_text_width: int = 960
     hud: bool = True
+    text_bands: bool = True
 
 
 class RecordingSettings(BaseModel):

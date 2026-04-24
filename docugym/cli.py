@@ -162,6 +162,11 @@ def display_smoketest(
         min=1,
         help="Integer multiplier applied to raw env frame size.",
     ),
+    min_window_width: int | None = typer.Option(
+        None,
+        min=1,
+        help="Minimum window width in pixels; narrower env frames are centered.",
+    ),
     steps: int | None = typer.Option(
         None,
         min=1,
@@ -175,6 +180,19 @@ def display_smoketest(
         None,
         "--hud/--no-hud",
         help="Enable or disable HUD status bar overlay.",
+    ),
+    text_bands: bool | None = typer.Option(
+        None,
+        "--text-bands/--overlay-text",
+        help=(
+            "Render HUD/subtitle in dedicated top and bottom bands instead "
+            "of overlaying gameplay pixels."
+        ),
+    ),
+    subtitle_max_text_width: int | None = typer.Option(
+        None,
+        min=1,
+        help="Maximum subtitle wrapping width in pixels, even on very wide windows.",
     ),
     env_kwargs: str | None = typer.Option(
         None,
@@ -193,7 +211,20 @@ def display_smoketest(
     effective_window_scale = (
         config.display.window_scale if window_scale is None else window_scale
     )
+    effective_min_window_width = (
+        config.display.min_window_width
+        if min_window_width is None
+        else min_window_width
+    )
     effective_hud = config.display.hud if hud is None else hud
+    effective_text_bands = (
+        config.display.text_bands if text_bands is None else text_bands
+    )
+    effective_subtitle_max_text_width = (
+        config.display.subtitle_max_text_width
+        if subtitle_max_text_width is None
+        else subtitle_max_text_width
+    )
 
     effective_env_kwargs: dict[str, Any] = {}
     if env is None or env_id == config.run.env_id:
@@ -205,10 +236,13 @@ def display_smoketest(
         seed=effective_seed,
         fps=effective_fps,
         window_scale=effective_window_scale,
+        min_window_width=effective_min_window_width,
         subtitle=subtitle,
         subtitle_font=config.display.subtitle_font,
         subtitle_size=config.display.subtitle_size,
+        subtitle_max_text_width=effective_subtitle_max_text_width,
         hud=effective_hud,
+        text_bands=effective_text_bands,
         env_kwargs=effective_env_kwargs,
         max_steps=steps,
     )

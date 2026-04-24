@@ -19,16 +19,27 @@ class Display:
         subtitle_font: str = "DejaVu Sans",
         subtitle_size: int = 22,
         hud: bool = True,
+        text_bands: bool = True,
+        min_window_width: int = 960,
+        subtitle_max_text_width: int = 960,
     ) -> None:
         if fps <= 0:
             raise ValueError("fps must be a positive integer")
         if window_scale <= 0:
             raise ValueError("window_scale must be a positive integer")
+        if min_window_width <= 0:
+            raise ValueError("min_window_width must be a positive integer")
+        if subtitle_max_text_width <= 0:
+            raise ValueError("subtitle_max_text_width must be a positive integer")
 
         self._env_id = env_id
         self._fps = fps
         self._window_scale = window_scale
         self._hud = hud
+        self._text_bands = text_bands
+        self._min_window_width = min_window_width
+        self._subtitle_max_text_width = subtitle_max_text_width
+        self._subtitle_max_lines = 2
 
         self._subtitle = ""
         self._step = 0
@@ -71,7 +82,7 @@ class Display:
         self._episode_reward = episode_reward
 
     def blit_frame(self, frame: np.ndarray) -> bool:
-        """Draw a frame, overlays, and pace to the configured FPS."""
+        """Draw a frame, text overlays or bands, and pace to the configured FPS."""
 
         if not self._is_open:
             return False
@@ -82,25 +93,44 @@ class Display:
 
         normalized_frame = self._normalize_frame(frame)
         frame_height, frame_width, _ = normalized_frame.shape
-        render_size = (
+        frame_render_size = (
             frame_width * self._window_scale,
             frame_height * self._window_scale,
         )
+        hud_band_height = self._status_bar_height() if self._hud and self._text_bands else 0
+        subtitle_band_height = (
+            self._subtitle_band_height() if self._subtitle and self._text_bands else 0
+        )
+        window_size, frame_offset = self._compute_window_layout(
+            frame_render_size=frame_render_size,
+            min_window_width=self._min_window_width,
+            hud_enabled=self._hud,
+            text_bands=self._text_bands,
+            subtitle_present=bool(self._subtitle),
+            hud_band_height=hud_band_height,
+            subtitle_band_height=subtitle_band_height,
+        )
+        frame_offset_x, frame_offset_y = frame_offset
 
-        if self._window is None or self._render_size != render_size:
-            self._window = pygame.display.set_mode(render_size)
-            self._render_size = render_size
+        if self._window is None or self._render_size != window_size:
+            self._window = pygame.display.set_mode(window_size)
+            self._render_size = window_size
 
         transposed = np.transpose(normalized_frame, (1, 0, 2))
         frame_surface = pygame.surfarray.make_surface(transposed)
         if self._window_scale != 1:
-            frame_surface = pygame.transform.scale(frame_surface, render_size)
+            frame_surface = pygame.transform.scale(frame_surface, frame_render_size)
 
-        self._window.blit(frame_surface, (0, 0))
+        self._window.fill((0, 0, 0))
+        self._window.blit(frame_surface, (frame_offset_x, frame_offset_y))
         if self._hud:
-            self._draw_status_bar()
+            self._draw_status_bar(y=0, band_height=hud_band_height)
         if self._subtitle:
-            self._draw_subtitle_card()
+            if self._text_bands:
+                subtitle_y = frame_offset_y + frame_render_size[1]
+                self._draw_subtitle_band(y=subtitle_y, band_height=subtitle_band_height)
+            else:
+                self._draw_subtitle_card()
 
         pygame.display.flip()
         self._clock.tick(self._fps)
@@ -116,7 +146,7 @@ class Display:
                 self._is_open = False
                 return
 
-    def _draw_status_bar(self) -> None:
+    def _draw_status_bar(self, y: int, band_height: int = 0) -> None:
         if self._window is None:
             return
 
@@ -126,12 +156,90 @@ class Display:
             f"| episode reward: {self._episode_reward:.2f}"
         )
         text_surface = self._hud_font.render(text, True, (245, 245, 245))
-        bar_height = text_surface.get_height() + 12
+        bar_height = band_height or self._status_bar_height()
+        bar_alpha = 255 if self._text_bands else 180
 
         bar = pygame.Surface((width, bar_height), pygame.SRCALPHA)
-        bar.fill((0, 0, 0, 180))
-        self._window.blit(bar, (0, 0))
-        self._window.blit(text_surface, (8, 6))
+        bar.fill((0, 0, 0, bar_alpha))
+        self._window.blit(bar, (0, y))
+
+        text_y = y + (bar_height - text_surface.get_height()) // 2
+        self._window.blit(text_surface, (8, text_y))
+
+    def _status_bar_height(self) -> int:
+        return self._hud_font.get_linesize() + 12
+
+    def _subtitle_band_height(self) -> int:
+        return self._subtitle_font.get_linesize() * self._subtitle_max_lines + 24
+
+    @staticmethod
+    def _compute_window_layout(
+        frame_render_size: tuple[int, int],
+        *,
+        min_window_width: int,
+        hud_enabled: bool,
+        text_bands: bool,
+        subtitle_present: bool,
+        hud_band_height: int,
+        subtitle_band_height: int,
+    ) -> tuple[tuple[int, int], tuple[int, int]]:
+        frame_width, frame_height = frame_render_size
+        window_width = max(frame_width, min_window_width)
+        window_height = frame_height
+        frame_offset_y = 0
+
+        if text_bands:
+            if hud_enabled:
+                window_height += hud_band_height
+                frame_offset_y = hud_band_height
+            if subtitle_present:
+                window_height += subtitle_band_height
+
+        frame_offset_x = (window_width - frame_width) // 2
+        return (window_width, window_height), (frame_offset_x, frame_offset_y)
+
+    @staticmethod
+    def _compute_subtitle_wrap_width(
+        window_width: int,
+        horizontal_margin: int,
+        subtitle_max_text_width: int,
+    ) -> int:
+        usable_width = max(40, window_width - horizontal_margin)
+        return min(usable_width, subtitle_max_text_width)
+
+    def _draw_subtitle_band(self, y: int, band_height: int) -> None:
+        if self._window is None:
+            return
+
+        width = self._window.get_width()
+        band = pygame.Surface((width, band_height), pygame.SRCALPHA)
+        band.fill((0, 0, 0, 255))
+        self._window.blit(band, (0, y))
+
+        lines = self._wrap_text(
+            text=self._subtitle,
+            font=self._subtitle_font,
+            max_width=self._compute_subtitle_wrap_width(
+                window_width=width,
+                horizontal_margin=24,
+                subtitle_max_text_width=self._subtitle_max_text_width,
+            ),
+            max_lines=self._subtitle_max_lines,
+        )
+        if not lines:
+            return
+
+        rendered_lines = [
+            self._subtitle_font.render(line, True, (255, 255, 255)) for line in lines
+        ]
+        line_height = max(line.get_height() for line in rendered_lines)
+        total_text_height = line_height * len(rendered_lines)
+        y_offset = y + (band_height - total_text_height) // 2
+
+        for line in rendered_lines:
+            x_offset = (width - line.get_width()) // 2
+            self._window.blit(line, (x_offset, y_offset))
+            y_offset += line_height
 
     def _draw_subtitle_card(self) -> None:
         if self._window is None:
@@ -140,8 +248,12 @@ class Display:
         lines = self._wrap_text(
             text=self._subtitle,
             font=self._subtitle_font,
-            max_width=max(120, self._window.get_width() - 48),
-            max_lines=2,
+            max_width=self._compute_subtitle_wrap_width(
+                window_width=self._window.get_width(),
+                horizontal_margin=48,
+                subtitle_max_text_width=self._subtitle_max_text_width,
+            ),
+            max_lines=self._subtitle_max_lines,
         )
         if not lines:
             return
@@ -227,6 +339,9 @@ def run_display_smoketest(
     subtitle_font: str,
     subtitle_size: int,
     hud: bool,
+    text_bands: bool = True,
+    min_window_width: int = 960,
+    subtitle_max_text_width: int = 960,
     env_kwargs: dict[str, Any] | None = None,
     max_steps: int | None = None,
 ) -> int:
@@ -244,6 +359,9 @@ def run_display_smoketest(
         subtitle_font=subtitle_font,
         subtitle_size=subtitle_size,
         hud=hud,
+        text_bands=text_bands,
+        min_window_width=min_window_width,
+        subtitle_max_text_width=subtitle_max_text_width,
     )
     display.set_subtitle(subtitle)
 

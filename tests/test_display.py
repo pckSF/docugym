@@ -114,3 +114,52 @@ def test_run_display_smoketest_updates_status_and_resets_reward(monkeypatch) -> 
     assert display.closed is True
     assert env.closed is True
     assert env.reset_calls == [7, None]
+
+
+def test_compute_window_layout_applies_min_width_and_centering() -> None:
+    window_size, frame_offset = Display._compute_window_layout(
+        frame_render_size=(480, 630),
+        min_window_width=900,
+        hud_enabled=True,
+        text_bands=True,
+        subtitle_present=True,
+        hud_band_height=28,
+        subtitle_band_height=44,
+    )
+
+    assert window_size == (900, 702)
+    assert frame_offset == (210, 28)
+
+
+def test_compute_window_layout_without_text_bands_keeps_frame_height() -> None:
+    window_size, frame_offset = Display._compute_window_layout(
+        frame_render_size=(480, 630),
+        min_window_width=900,
+        hud_enabled=True,
+        text_bands=False,
+        subtitle_present=True,
+        hud_band_height=28,
+        subtitle_band_height=44,
+    )
+
+    assert window_size == (900, 630)
+    assert frame_offset == (210, 0)
+
+
+def test_compute_subtitle_wrap_width_caps_wide_windows() -> None:
+    assert (
+        Display._compute_subtitle_wrap_width(
+            window_width=2200,
+            horizontal_margin=24,
+            subtitle_max_text_width=960,
+        )
+        == 960
+    )
+    assert (
+        Display._compute_subtitle_wrap_width(
+            window_width=640,
+            horizontal_margin=24,
+            subtitle_max_text_width=960,
+        )
+        == 616
+    )
