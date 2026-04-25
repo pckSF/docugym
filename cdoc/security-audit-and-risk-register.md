@@ -2,9 +2,9 @@
 type: reference
 tags: [security, audit, risk, supply-chain]
 created: 2026-04-20
-updated: 2026-04-24
+updated: 2026-04-26
 status: active
-related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md, betterleaks-secret-scanning-evaluation-and-tuning.md]
+related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md, betterleaks-secret-scanning-evaluation-and-tuning.md, audit-container-cli-hardening-evaluation.md]
 ---
 
 # Security Audit and Risk Register
@@ -121,14 +121,19 @@ networking assumptions change.
   `httpcore`, `anyio`, `h11`) is captured in lock-derived, hash-pinned
   `requirements.txt`.
 - A dedicated `audit` service runs dependency vulnerability checks in a more
-  restricted container context (`read_only`, `tmpfs`, `no-new-privileges`, and
-  read-only source mount).
+  restricted container context (`read_only`, `tmpfs`, `no-new-privileges`,
+  `cap_drop: ALL`, and read-only source mount).
 - `audit` now uses a dedicated Docker build target with digest-pinned
   Chainguard Python base
   (`cgr.dev/chainguard/python@sha256:18a4fbda8c280978b6aa5329f7acd4dbb106876e76fdc87913855ebf4876f2ff`,
   Python 3.14.4, verified 2026-04-24)
   and pinned audit tool version (`pip-audit==2.9.0`), removing runtime tool
   bootstrap.
+- `audit` compose service now drops all Linux capabilities (`cap_drop: ALL`),
+  closing the last privilege gap in the scanning container. The Chainguard
+  minimal base already provides no shell or CLI utilities; `cap_drop: ALL`
+  adds a kernel-level capability barrier on top. See
+  [audit-container-cli-hardening-evaluation.md](audit-container-cli-hardening-evaluation.md).
 
 ## Changelog
 
@@ -148,6 +153,8 @@ networking assumptions change.
   tuning for strict, context-scoped false-positive suppression.
 - 2026-04-24: Audited post-Stage 4 changes since commit `58978c9`; documented
   new `audit` service hardening controls, sidecar binding exposure, and runtime
+- 2026-04-26: Added `cap_drop: ALL` to `audit` compose service; updated
+  positive controls to reflect full capability-drop posture.
   `pip-audit` bootstrap supply-chain tradeoff.
 - 2026-04-24: Updated after pinning `audit` to a dedicated build target with
   pinned base image tag and pinned `pip-audit` version; removed runtime

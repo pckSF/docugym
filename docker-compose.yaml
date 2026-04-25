@@ -62,6 +62,8 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     command:
       - --require-hashes
       - -r
