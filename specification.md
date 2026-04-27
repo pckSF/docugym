@@ -227,6 +227,13 @@ then start the next. At every stage: *you may deviate if a better approach appea
   lock-free `queue.Queue[np.ndarray]` fed by the TTS worker.
 - Subtitle queue is fed **per-sentence** with the graphemes (Kokoro yields these
   alongside audio), so subtitles are naturally synced to audio.
+- Voice output must be toggleable at runtime (for example, `--voice/--no-voice`),
+  while subtitle updates stay enabled in both modes.
+  - Reason 1: users may prefer reading subtitles without listening to speech.
+  - Reason 2: subtitle-only mode lowers compute demand for weaker systems or when
+    fewer resources are available.
+  - Reason 3: subtitle-only mode allows cleaner separation of narration and TTS
+    testing/build workflows.
 - **DoD:** Narration text is audibly spoken in a British voice (`bm_george`), starts
   within ~400 ms of the text being ready, and subtitles change as each sentence
   plays. Audio does not glitch when the env loop runs at 60 FPS.
@@ -273,6 +280,7 @@ then start the next. At every stage: *you may deviate if a better approach appea
 - Typer CLI:
   - `docugym run --config configs/atari.yaml`
   - `docugym run --env ALE/MsPacman-v5 --policy sb3/ppo-MsPacmanNoFrameskip-v4`
+  - `docugym run --env ALE/Pong-v5 --no-voice`  # subtitle-only narration mode
   - `docugym list-voices` — prints Kokoro's 8 British voices + samples
   - `docugym list-envs` — prints supported env presets
 - Config presets in `configs/`: `atari.yaml`, `lunarlander.yaml`, `carracing.yaml`.
@@ -405,6 +413,7 @@ narration:
   previous_narration_window: 2
 
 tts:
+  enabled: true                     # false = subtitle-only narration (no TTS/audio)
   engine: "kokoro"                  # kokoro | xtts | chatterbox
   kokoro:
     voice: "bm_george"              # bm_fable, bm_daniel, bm_lewis, bf_alice...
