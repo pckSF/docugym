@@ -66,6 +66,45 @@ OpenAI-compatible VLM endpoint.
 - `docugym list-voices`: show Kokoro's 8 British voices and sample lines.
 - `docugym run --config configs/carracing.yaml`: start from a Box2D preset.
 
+## Wrapper Mode for Experiments
+
+Use wrapper mode when you want to keep a normal Gymnasium training or control
+loop but still get live DocuGym narration and subtitles.
+
+```python
+import gymnasium as gym
+
+from docugym import docuwrapper
+
+env = gym.make("CartPole-v1", render_mode="rgb_array")
+env = docuwrapper(
+	env,
+	env_id="CartPole-v1",
+	voice_enabled=False,
+	narration_interval_seconds=3.0,
+	reward_spike_threshold=0.5,
+)
+
+obs, info = env.reset(seed=42)
+for _ in range(300):
+	action = env.action_space.sample()
+	obs, reward, terminated, truncated, info = env.step(action)
+	if terminated or truncated:
+		obs, info = env.reset()
+
+env.close()
+```
+
+Wrapper behavior notes:
+- It keeps Gym-style `reset` and `step` usage and always opens the DocuGym window.
+- Narration metadata is added to `info["docugym"]` on `reset` and `step`.
+- Optional callbacks can be passed at initialization for narration/subtitle/audio/status events.
+- `space` pauses frame progression until toggled again, `n` forces narration,
+  `m` toggles mute, and `s` saves a clip snapshot.
+
+Use `docugym run` for production runs and recording workflows. Use wrapper mode
+for experimentation in custom control loops.
+
 ## Tuning and Eval
 
 Use prompt tuning to run narrations over varied frames and compare style changes:
