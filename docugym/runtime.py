@@ -20,7 +20,8 @@ from typing import (
 
 import numpy as np
 
-from docugym.display import Display, DisplayAction
+from docugym.display import Display
+from docugym.display_actions import build_action_transitions, poll_display_actions
 from docugym.env import (
     DEFAULT_TRUSTED_SB3_REPO_PREFIXES,
     RandomAgent,
@@ -178,17 +179,6 @@ def _set_display_flag(display: Any, method_name: str, value: bool) -> None:
     method = getattr(display, method_name, None)
     if callable(method):
         method(value)
-
-
-def _poll_display_actions(display: Any) -> list[DisplayAction]:
-    poll = getattr(display, "poll_actions", None)
-    if not callable(poll):
-        return []
-
-    actions = poll()
-    if not isinstance(actions, list):
-        return []
-    return actions
 
 
 def _clear_audio_buffer(audio_output: AudioOutputClient) -> None:
@@ -695,15 +685,21 @@ async def run_session(
                     )
                     active_recorder = None
 
-            for action in _poll_display_actions(display):
+            actions = poll_display_actions(display)
+            for transition in build_action_transitions(
+                actions,
+                paused=paused,
+                muted=audio_muted,
+            ):
+                action = transition.action
                 if action == "toggle_pause":
-                    paused = not paused
+                    paused = transition.paused
                     _set_display_flag(display, "set_paused", paused)
                     logger.info("Playback pause toggled: paused=%s", paused)
                     continue
 
                 if action == "toggle_mute":
-                    audio_muted = not audio_muted
+                    audio_muted = transition.muted
                     _set_display_flag(display, "set_muted", audio_muted)
                     if audio_muted:
                         clear_async_queue(tts_q)

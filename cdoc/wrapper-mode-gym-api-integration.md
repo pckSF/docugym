@@ -70,6 +70,18 @@ adding live DocuGym narration/subtitles and command-like toggles as constructor 
   and narration candidate queue handling.
 - Added `tests/test_queue_utils.py` to lock queue drop/drain semantics.
 
+### Implemented Phase 5 Outcome
+
+- Extracted shared display action helpers into `docugym/display_actions.py`
+  (`poll_display_actions`, `build_action_transitions`) to normalize action
+  polling and pause/mute toggle transitions.
+- Updated `docugym/runtime.py` display loop to use shared action transitions,
+  preserving existing pause/mute/force/save side effects.
+- Updated `docugym/wrapper.py` action handling to use the same shared
+  transition logic, reducing input-control drift risk.
+- Added `tests/test_display_actions.py` to lock transition ordering and
+  validated action polling behavior.
+
 ## Options Considered
 
 #### Option 1: Keep CLI-only production surface
@@ -118,3 +130,5 @@ recommended production path for recording and full run management.
   and context-string assembly between wrapper and canonical runtime paths.
 - 2026-05-07: Updated for Phase 4 refactor that shares queue drop/drain helpers
   between wrapper and canonical runtime paths.
+- 2026-05-07: Updated for Phase 5 refactor that shares display action polling
+  and pause/mute transition logic between wrapper and canonical runtime paths.

@@ -14,7 +14,8 @@ import numpy as np
 from PIL import Image
 
 from docugym.audio import AudioOutput
-from docugym.display import Display, DisplayAction
+from docugym.display import Display
+from docugym.display_actions import build_action_transitions, poll_display_actions
 from docugym.keyframes import KeyframeSelector
 from docugym.narration_events import (
     format_event_summary,
@@ -479,15 +480,20 @@ class DocuWrapper(gym.Wrapper):
             )
 
     def _handle_actions(self, frame: np.ndarray) -> None:
-        actions = self._poll_display_actions()
-        for action in actions:
+        actions = poll_display_actions(self._display)
+        for transition in build_action_transitions(
+            actions,
+            paused=self._paused,
+            muted=self._audio_muted,
+        ):
+            action = transition.action
             if action == "toggle_pause":
-                self._paused = not self._paused
+                self._paused = transition.paused
                 self._display.set_paused(self._paused)
                 continue
 
             if action == "toggle_mute":
-                self._audio_muted = not self._audio_muted
+                self._audio_muted = transition.muted
                 self._display.set_muted(self._audio_muted)
                 if self._audio_muted and self._audio_output is not None:
                     self._audio_output.clear()
@@ -504,16 +510,6 @@ class DocuWrapper(gym.Wrapper):
 
             if action == "save_clip":
                 self._save_clip(frame)
-
-    def _poll_display_actions(self) -> list[DisplayAction]:
-        poll = getattr(self._display, "poll_actions", None)
-        if not callable(poll):
-            return []
-
-        actions = poll()
-        if not isinstance(actions, list):
-            return []
-        return actions
 
     def _save_clip(self, frame: np.ndarray) -> None:
         frame_copy = np.array(frame, copy=True)
