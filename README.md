@@ -44,16 +44,16 @@ docugym run --config configs/lunarlander.yaml --no-voice --wait-for-vlm
 
 ```bash
 docugym run \
-  --config configs/atari.yaml \
-  --env ALE/Pong-v5 \
-  --policy sb3/ppo-PongNoFrameskip-v4 \
-  --wait-for-vlm
+	--config configs/atari.yaml \
+	--env ALE/Pong-v5 \
+	--policy sb3/ppo-PongNoFrameskip-v4 \
+	--wait-for-vlm
+```
 
 7. Record a narrated run to MP4 (optional Stage 9):
 
 ```bash
 docugym run --config configs/atari.yaml --record out/session.mp4 --wait-for-vlm
-```
 ```
 
 The `run` command renders the live PyGame window, keeps gameplay smooth with the
@@ -65,6 +65,50 @@ local OpenAI-compatible VLM endpoint.
 - `docugym list-envs`: show supported Stage 8 preset configs and their effective env/policy.
 - `docugym list-voices`: show Kokoro's 8 British voices and sample lines.
 - `docugym run --config configs/carracing.yaml`: start from a Box2D preset.
+
+## Stage 10 Tuning and Eval
+
+Use prompt tuning to run narrations over varied frames and compare style changes:
+
+```bash
+docugym tune prompt --env ALE/SpaceInvaders-v5 --samples 20 --wait-for-vlm
+```
+
+Useful tuning flags:
+- `--step-stride`: number of env steps between samples (higher gives more variety).
+- `--seed`: repeatable sample sequence for A/B comparisons.
+- `--policy` or `--agent`: align tuning with your runtime control path.
+
+### How to make narration sound more like a nature documentary
+
+1. Try a different Kokoro voice:
+
+```yaml
+tts:
+	kokoro:
+		voice: "bm_fable"
+```
+
+2. Space out narration to reduce chatter and keep lines more deliberate:
+
+```yaml
+narration:
+	interval_seconds: 4.0
+	min_gap_seconds: 2.0
+```
+
+3. Adjust model size for your GPU and style preference:
+
+```yaml
+vlm:
+	model: "Qwen/Qwen3-VL-4B-Instruct"
+```
+
+Model guidance:
+- `Qwen/Qwen3-VL-4B-Instruct`: faster and lighter.
+- `Qwen/Qwen3-VL-8B-Instruct-AWQ`: higher quality baseline.
+
+Restart the sidecar after changing `vlm.model` so the new model loads.
 
 ## Runtime Shortcuts
 
@@ -88,8 +132,8 @@ local OpenAI-compatible VLM endpoint.
 	increase `--wait-timeout` if needed.
 - GPU out-of-memory under load:
 	budget roughly 9-11 GB for vLLM (Qwen3-VL-8B-AWQ) + 1.5 GB for Kokoro +
-	about 1 GB runtime overhead. Reduce model size or disable voice
-	(`--no-voice`) if memory pressure is high.
+	about 1 GB runtime overhead. Reduce model size or disable voice (`--no-voice`)
+	if memory pressure is high.
 - First narration is noticeably delayed:
 	the first request pays model prefill cost. Warm up the sidecar before runs.
 - SB3 checkpoint mismatch on Box2D/Atari:

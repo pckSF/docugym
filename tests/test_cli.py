@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
@@ -699,3 +700,95 @@ def test_list_envs_prints_stage8_presets(tmp_path: Path) -> None:
     assert "atari" in result.output
     assert "lunarlander" in result.output
     assert "carracing" in result.output
+
+
+def test_tune_prompt_command_invokes_tuning_runner(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+  env_id: "CartPole-v1"
+  env_kwargs:
+    frameskip: 2
+  seed: 17
+agent:
+  kind: "random"
+  sb3_repo_id: "sb3/ppo-LunarLander-v2"
+  sb3_filename: "ppo-LunarLander-v2.zip"
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+""",
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeNarrator:
+        def __init__(self, **kwargs: object) -> None:
+            captured["narrator_init"] = kwargs
+
+        def wait_until_ready_sync(self, **kwargs: object) -> bool:
+            captured["wait_kwargs"] = kwargs
+            return True
+
+    def fake_run_prompt_tuning(**kwargs: object) -> list[SimpleNamespace]:
+        captured.update(kwargs)
+        sample_count = kwargs["samples"]
+        if not isinstance(sample_count, int):
+            raise AssertionError("samples must be an int")
+        return [
+            SimpleNamespace(
+                step=5,
+                reward=1.0,
+                narration="The patient traveller drifts onward.",
+                latency_ms=150.0,
+            )
+            for _ in range(sample_count)
+        ]
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+    monkeypatch.setattr("docugym.cli.run_prompt_tuning", fake_run_prompt_tuning)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "tune",
+            "prompt",
+            "--env",
+            "CartPole-v1",
+            "--samples",
+            "3",
+            "--step-stride",
+            "2",
+            "--wait-for-vlm",
+            "--wait-timeout",
+            "4",
+            "--env-kwargs",
+            '{"repeat_action_probability": 0.1}',
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["env_id"] == "CartPole-v1"
+    assert captured["samples"] == 3
+    assert captured["step_stride"] == 2
+    assert captured["agent_kind"] == "random"
+    assert captured["seed"] == 17
+    assert captured["wait_kwargs"] == {"timeout_seconds": 4.0}
+    assert captured["env_kwargs"] == {
+        "frameskip": 2,
+        "repeat_action_probability": 0.1,
+    }
+    assert "[01]" in result.output
+    assert "Mean narration latency" in result.output

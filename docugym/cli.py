@@ -15,12 +15,19 @@ from docugym.env import run_smoketest
 from docugym.logging_config import configure_logging
 from docugym.narrator import VLMNarrator
 from docugym.runtime import run_stage6_session_sync
+from docugym.tune import run_prompt_tuning
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
     help="DocuGym CLI for local narrated Gymnasium runs.",
 )
+tune_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Narration tuning helpers.",
+)
+app.add_typer(tune_app, name="tune")
 logger = logging.getLogger(__name__)
 
 _KOKORO_BRITISH_VOICE_SAMPLES: tuple[tuple[str, str], ...] = (
@@ -582,3 +589,138 @@ def run(
         f"dropped={result.dropped_narration_candidates} "
         f"{latency_summary}"
     )
+
+
+@tune_app.command("prompt")
+def tune_prompt(
+    ctx: typer.Context,
+    env: str | None = typer.Option(None, "--env", help="Gymnasium environment id."),
+    samples: int = typer.Option(
+        20,
+        "--samples",
+        min=1,
+        help="Number of narrated samples to generate.",
+    ),
+    step_stride: int = typer.Option(
+        5,
+        "--step-stride",
+        min=1,
+        help="Environment steps between narrated samples.",
+    ),
+    seed: int | None = typer.Option(None, help="Random seed for reset/action space."),
+    agent: Literal["random", "scripted", "sb3"] | None = typer.Option(
+        None,
+        "--agent",
+        help="Action source used during prompt tuning.",
+    ),
+    policy: str | None = typer.Option(
+        None,
+        "--policy",
+        help=(
+            "SB3 policy repo shorthand (e.g. sb3/ppo-PongNoFrameskip-v4). "
+            "Sets --agent sb3."
+        ),
+    ),
+    repo_id: str | None = typer.Option(
+        None,
+        "--repo-id",
+        help="Hugging Face model repository id for SB3 policy loading.",
+    ),
+    filename: str | None = typer.Option(
+        None,
+        "--filename",
+        help="Policy filename inside the SB3 Hugging Face repo.",
+    ),
+    wait_for_vlm: bool = typer.Option(
+        False,
+        "--wait-for-vlm",
+        help="Poll /models until the local VLM endpoint is ready.",
+    ),
+    wait_timeout: float = typer.Option(
+        60.0,
+        "--wait-timeout",
+        min=1.0,
+        help="Maximum seconds to wait when --wait-for-vlm is enabled.",
+    ),
+    env_kwargs: str | None = typer.Option(
+        None,
+        "--env-kwargs",
+        help="JSON object of extra kwargs passed to gym.make().",
+    ),
+) -> None:
+    """Generate multiple narrations over varied frames for Stage 10 prompt tuning."""
+
+    state = _get_state(ctx)
+    config = state.settings
+
+    env_id = env or config.run.env_id
+    effective_seed = config.run.seed if seed is None else seed
+    effective_agent = config.agent.kind if agent is None else agent
+    effective_repo_id = repo_id or config.agent.sb3_repo_id
+    effective_filename = filename or config.agent.sb3_filename
+    if policy:
+        effective_agent = "sb3"
+        effective_repo_id = policy
+        if filename is None:
+            effective_filename = f"{policy.rsplit('/', maxsplit=1)[-1]}.zip"
+
+    effective_env_kwargs: dict[str, Any] = {}
+    if env is None or env_id == config.run.env_id:
+        effective_env_kwargs.update(config.run.env_kwargs)
+    effective_env_kwargs.update(_parse_env_kwargs(env_kwargs))
+
+    narrator = VLMNarrator(
+        base_url=config.vlm.base_url,
+        model=config.vlm.model,
+        max_tokens=config.vlm.max_tokens,
+        temperature=config.vlm.temperature,
+        top_p=config.vlm.top_p,
+        image_detail=config.vlm.image_detail,
+    )
+
+    if wait_for_vlm:
+        typer.echo(
+            f"Waiting for VLM endpoint at {config.vlm.base_url} "
+            f"(timeout {wait_timeout:.1f}s)..."
+        )
+        ready = narrator.wait_until_ready_sync(timeout_seconds=wait_timeout)
+        if not ready:
+            typer.secho(
+                "VLM endpoint did not become ready before timeout. "
+                "Start the sidecar and retry.",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+    results = run_prompt_tuning(
+        env_id=env_id,
+        seed=effective_seed,
+        samples=samples,
+        step_stride=step_stride,
+        narrator=narrator,
+        agent_kind=effective_agent,
+        sb3_repo_id=effective_repo_id,
+        sb3_filename=effective_filename,
+        trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
+        enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        env_kwargs=effective_env_kwargs,
+    )
+
+    typer.echo(
+        "Prompt tuning complete: "
+        f"env={env_id} "
+        f"samples={len(results)} "
+        f"model={config.vlm.model}"
+    )
+
+    for index, sample in enumerate(results, start=1):
+        typer.echo(
+            f"[{index:02d}] "
+            f"step={sample.step} "
+            f"reward={sample.reward:+.2f} "
+            f"latency={sample.latency_ms:.1f}ms"
+        )
+        typer.echo(sample.narration)
+
+    mean_latency_ms = sum(sample.latency_ms for sample in results) / len(results)
+    typer.echo(f"Mean narration latency: {mean_latency_ms:.1f}ms")
