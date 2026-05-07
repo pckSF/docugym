@@ -1,0 +1,24 @@
+run:
+  env_id: "ALE/MsPacman-v5"
+  env_kwargs:
+    frameskip: 4
+    repeat_action_probability: 0.25
+    full_action_space: false
+  seed: 42
+  fps: 60
+
+agent:
+  kind: "sb3"
+  sb3_repo_id: "sb3/ppo-MsPacmanNoFrameskip-v4"
+  sb3_filename: "ppo-MsPacmanNoFrameskip-v4.zip"
+
+narration:
+  interval_seconds: 3.0
+
+tts:
+  enabled: true
+  kokoro:
+    voice: "bm_george"
+
+display:
+  window_scale: 3

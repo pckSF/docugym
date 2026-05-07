@@ -1,0 +1,19 @@
+run:
+  env_id: "CarRacing-v3"
+  seed: 42
+  fps: 50
+
+agent:
+  kind: "random"
+
+narration:
+  interval_seconds: 2.5
+  min_gap_seconds: 1.2
+
+tts:
+  enabled: true
+  kokoro:
+    voice: "bf_isabella"
+
+display:
+  window_scale: 1

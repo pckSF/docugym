@@ -1,0 +1,20 @@
+run:
+  env_id: "LunarLander-v2"
+  seed: 42
+  fps: 60
+
+agent:
+  kind: "sb3"
+  sb3_repo_id: "sb3/ppo-LunarLander-v2"
+  sb3_filename: "ppo-LunarLander-v2.zip"
+
+narration:
+  interval_seconds: 2.5
+
+tts:
+  enabled: true
+  kokoro:
+    voice: "bm_lewis"
+
+display:
+  window_scale: 1

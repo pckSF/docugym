@@ -8,38 +8,51 @@ with local inference for both vision-language narration and text-to-speech.
 The long-term goal is a smooth, game-window-first viewing experience where narration
 lags gameplay by about one to two seconds but still feels synchronized and informative.
 
-## Stage 4 Quickstart
+## Quickstart (Stage 8)
 
-1. Start the local VLM sidecar:
+1. Install project dependencies:
+
+```bash
+uv sync
+```
+
+2. Start the local VLM sidecar:
 
 ```bash
 scripts/serve_vlm.sh
 ```
 
-2. In another terminal, run the app with synchronous narration every 60 frames:
+3. In another terminal, run with a preset config:
+
+```bash
+docugym run --config configs/atari.yaml --wait-for-vlm
+```
+
+4. Run subtitle-only narration when you want lower compute or silent playback:
+
+```bash
+docugym run --config configs/lunarlander.yaml --no-voice --wait-for-vlm
+```
+
+5. Override config values from the command line when needed:
 
 ```bash
 docugym run \
-	--env ALE/Pong-v5 \
-	--policy sb3/ppo-PongNoFrameskip-v4 \
-	--narrate-every 60 \
-	--wait-for-vlm
+  --config configs/atari.yaml \
+  --env ALE/Pong-v5 \
+  --policy sb3/ppo-PongNoFrameskip-v4 \
+  --wait-for-vlm
 ```
 
-The `run` command renders the live PyGame window and sends one selected frame
-per interval to the local OpenAI-compatible endpoint at `vlm.base_url`. Returned
-narration text is shown in subtitles and logged with per-call latency.
+The `run` command renders the live PyGame window, keeps gameplay smooth with the
+Stage 6 async pipeline, and updates subtitles from narration text returned by the
+local OpenAI-compatible VLM endpoint.
 
-Subtitles and HUD text are rendered in dedicated top/bottom text bands by
-default (`display.text_bands: true`) so gameplay pixels stay unobstructed.
+## Presets and Discovery Commands
 
-## Useful Flags
-
-- `--narrate-every`: fixed frame cadence for Stage 4 synchronous narration.
-- `--wait-for-vlm`: poll `/models` until the sidecar is ready.
-- `--wait-timeout`: readiness timeout in seconds.
-- `--policy`: shorthand for SB3 Hugging Face repo id; implies `--agent sb3`.
-- `--env-kwargs`: JSON object forwarded to `gym.make(...)`.
+- `docugym list-envs`: show supported Stage 8 preset configs and their effective env/policy.
+- `docugym list-voices`: show Kokoro's 8 British voices and sample lines.
+- `docugym run --config configs/carracing.yaml`: start from a Box2D preset.
 
 ## Runtime Shortcuts
 
@@ -47,3 +60,21 @@ default (`display.text_bands: true`) so gameplay pixels stay unobstructed.
 - `n`: force narration for the current frame.
 - `m`: mute or unmute voiced narration (subtitles continue).
 - `s`: save the current frame and latest narration text to `out/clips/`.
+
+## Troubleshooting
+
+- vLLM startup appears slow:
+	first model load can take around 60-120 seconds. Use `--wait-for-vlm` and
+	increase `--wait-timeout` if needed.
+- GPU out-of-memory under load:
+	budget roughly 9-11 GB for vLLM (Qwen3-VL-8B-AWQ) + 1.5 GB for Kokoro +
+	about 1 GB runtime overhead. Reduce model size or disable voice
+	(`--no-voice`) if memory pressure is high.
+- First narration is noticeably delayed:
+	the first request pays model prefill cost. Warm up the sidecar before runs.
+- SB3 checkpoint mismatch on Box2D/Atari:
+	many SB3 checkpoints are version-specific (for example `ppo-LunarLander-v2`
+	and Atari `*NoFrameskip-v4`). Use matching env ids when possible.
+- Audio glitches during high narration density:
+	increase `narration.interval_seconds` or `narration.min_gap_seconds` to
+	reduce synthesis pressure; stale narration candidates are dropped by design.
