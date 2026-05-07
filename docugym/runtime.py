@@ -36,6 +36,10 @@ from docugym.narration_events import (
     join_previous_narrations,
     join_recent_events,
 )
+from docugym.narration_defaults import (
+    DEFAULT_NARRATION_TEXT,
+    validate_narration_config,
+)
 from docugym.narrator import NarrationContext
 from docugym.queue_utils import (
     clear_async_queue,
@@ -190,9 +194,6 @@ def _clear_audio_buffer(audio_output: AudioOutputClient) -> None:
         clear()
 
 
-_save_clip_snapshot = save_clip_snapshot
-
-
 async def _narrate_async(
     narrator: AsyncNarratorClient | NarratorClient,
     frame: np.ndarray,
@@ -272,14 +273,12 @@ async def run_session(
 ) -> RunResult:
     """Run async narration with keyframe selection and queue backpressure."""
 
-    if narration_interval_seconds <= 0:
-        raise ValueError("narration_interval_seconds must be positive")
-    if min_gap_seconds < 0:
-        raise ValueError("min_gap_seconds must be non-negative")
-    if max_context_events <= 0:
-        raise ValueError("max_context_events must be positive")
-    if previous_narration_window <= 0:
-        raise ValueError("previous_narration_window must be positive")
+    validate_narration_config(
+        narration_interval_seconds=narration_interval_seconds,
+        min_gap_seconds=min_gap_seconds,
+        max_context_events=max_context_events,
+        previous_narration_window=previous_narration_window,
+    )
     if max_steps is not None and max_steps <= 0:
         raise ValueError("max_steps must be a positive integer when provided")
     if max_episodes is not None and max_episodes <= 0:
@@ -297,7 +296,7 @@ async def run_session(
         text_bands=text_bands,
         min_window_width=min_window_width,
     )
-    display.set_subtitle("A pause. The creature gathers itself.")
+    display.set_subtitle(DEFAULT_NARRATION_TEXT)
     _set_display_flag(display, "set_narrating", False)
 
     random_agent = RandomAgent(env)
@@ -373,7 +372,7 @@ async def run_session(
     rendered_steps = 0
     paused = False
     audio_muted = not tts_active
-    latest_narration_text = "A pause. The creature gathers itself."
+    latest_narration_text = DEFAULT_NARRATION_TEXT
     previous_narrations: deque[str] = deque(maxlen=previous_narration_window)
     recent_events: deque[str] = deque(maxlen=max_context_events)
     _set_display_flag(display, "set_paused", paused)
@@ -545,7 +544,7 @@ async def run_session(
                     candidate.step,
                     exc,
                 )
-                narration = "A pause. The creature gathers itself."
+                narration = DEFAULT_NARRATION_TEXT
 
             latency_ms = (perf_counter() - started) * 1000.0
             narration_count += 1
@@ -713,7 +712,7 @@ async def run_session(
                     frame_copy = np.array(latest_display.frame, copy=True)
                     try:
                         frame_path, narration_path = await asyncio.to_thread(
-                            _save_clip_snapshot,
+                            save_clip_snapshot,
                             frame=frame_copy,
                             step=latest_display.step,
                             narration=latest_narration_text,

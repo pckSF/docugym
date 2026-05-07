@@ -349,7 +349,7 @@ def test_run_session_shortcuts_mute_and_save_clip(monkeypatch) -> None:
 
     monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
     monkeypatch.setattr("docugym.runtime.Display", fake_display)
-    monkeypatch.setattr("docugym.runtime._save_clip_snapshot", fake_save_clip_snapshot)
+    monkeypatch.setattr("docugym.runtime.save_clip_snapshot", fake_save_clip_snapshot)
 
     narrator = AsyncFakeNarrator()
     speaker = FakeSpeaker()

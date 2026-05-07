@@ -22,6 +22,10 @@ from docugym.narration_events import (
     join_previous_narrations,
     join_recent_events,
 )
+from docugym.narration_defaults import (
+    DEFAULT_NARRATION_TEXT,
+    validate_narration_config,
+)
 from docugym.narrator import NarrationContext, VLMNarrator
 from docugym.queue_utils import drain_latest_sync, push_drop_oldest_sync
 from docugym.tts import KokoroTTS, SpeechSentence
@@ -53,9 +57,6 @@ class _WrapperStats:
     narration_count: int = 0
     dropped_narration_candidates: int = 0
     last_latency_ms: float | None = None
-
-
-_save_clip_snapshot = save_clip_snapshot
 
 
 def _resolve_env_id(env: gym.Env[Any, Any], env_id: str | None) -> str:
@@ -113,14 +114,12 @@ class DocuWrapper(gym.Wrapper):
     ) -> None:
         super().__init__(env)
 
-        if narration_interval_seconds <= 0:
-            raise ValueError("narration_interval_seconds must be positive")
-        if min_gap_seconds < 0:
-            raise ValueError("min_gap_seconds must be non-negative")
-        if max_context_events <= 0:
-            raise ValueError("max_context_events must be positive")
-        if previous_narration_window <= 0:
-            raise ValueError("previous_narration_window must be positive")
+        validate_narration_config(
+            narration_interval_seconds=narration_interval_seconds,
+            min_gap_seconds=min_gap_seconds,
+            max_context_events=max_context_events,
+            previous_narration_window=previous_narration_window,
+        )
 
         self._env_id = _resolve_env_id(env, env_id)
         self._narrator = narrator or VLMNarrator(
@@ -143,7 +142,7 @@ class DocuWrapper(gym.Wrapper):
             text_bands=text_bands,
             min_window_width=min_window_width,
         )
-        self._display.set_subtitle("A pause. The creature gathers itself.")
+        self._display.set_subtitle(DEFAULT_NARRATION_TEXT)
 
         self._voice_enabled = voice_enabled
         self._audio_output: AudioOutput | None = None
@@ -188,7 +187,7 @@ class DocuWrapper(gym.Wrapper):
         self._session_step = 0
         self._episode_reward = 0.0
         self._latest_frame: np.ndarray | None = None
-        self._latest_narration = "A pause. The creature gathers itself."
+        self._latest_narration = DEFAULT_NARRATION_TEXT
         self._latest_subtitle = self._latest_narration
 
         self._paused = False
@@ -353,7 +352,7 @@ class DocuWrapper(gym.Wrapper):
                     request.step,
                     exc,
                 )
-                narration = "A pause. The creature gathers itself."
+                narration = DEFAULT_NARRATION_TEXT
 
             latency_ms = (perf_counter() - started) * 1000.0
             self._record_narration_result(narration=narration, latency_ms=latency_ms)
@@ -493,7 +492,7 @@ class DocuWrapper(gym.Wrapper):
         with self._stats_lock:
             narration = self._latest_narration
         try:
-            frame_path, narration_path = _save_clip_snapshot(
+            frame_path, narration_path = save_clip_snapshot(
                 frame=frame_copy,
                 step=self._session_step,
                 narration=narration,

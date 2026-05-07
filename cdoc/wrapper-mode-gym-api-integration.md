@@ -92,6 +92,19 @@ adding live DocuGym narration/subtitles and command-like toggles as constructor 
 - Added `tests/test_clips.py` to lock snapshot write behavior for both uint8 and
   non-uint8 frame inputs.
 
+### Implemented Phase 7 Consolidation Outcome
+
+- Extracted shared narration defaults and validation into
+  `docugym/narration_defaults.py` (`DEFAULT_NARRATION_TEXT`,
+  `validate_narration_config`) to remove duplicated fallback strings and
+  duplicated wrapper/runtime narration-config validation checks.
+- Updated `docugym/runtime.py`, `docugym/wrapper.py`, and `docugym/narrator.py`
+  to consume shared narration defaults/validation, reducing drift risk.
+- Removed stale private clip helper aliases in runtime/wrapper and switched
+  call sites/tests to the shared `save_clip_snapshot` symbol.
+- Added `tests/test_narration_defaults.py` to lock validation contract and
+  default narration text behavior.
+
 ## Options Considered
 
 #### Option 1: Keep CLI-only production surface
@@ -144,3 +157,5 @@ recommended production path for recording and full run management.
   and pause/mute transition logic between wrapper and canonical runtime paths.
 - 2026-05-07: Updated for Phase 6 refactor that shares clip snapshot persistence
   logic between wrapper and canonical runtime paths.
+- 2026-05-07: Updated for Phase 7 consolidation run that centralizes narration
+  defaults/validation and removes stale helper aliases.

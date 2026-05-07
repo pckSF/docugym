@@ -10,6 +10,8 @@ from PIL import Image
 import httpx
 import numpy as np
 
+from docugym.narration_defaults import DEFAULT_NARRATION_TEXT
+
 SYSTEM_PROMPT = """You are a calm, wonder-filled nature-documentary narrator in the
 tradition of BBC
 wildlife programmes. You are watching a game on screen and narrating it as if it
@@ -92,7 +94,7 @@ class VLMNarrator:
 
         content = body["choices"][0]["message"]["content"]
         normalized = self._normalize_message_content(content)
-        return normalized or "A pause. The creature gathers itself."
+        return normalized or DEFAULT_NARRATION_TEXT
 
     def narrate_frame_sync(self, frame: np.ndarray, context: NarrationContext) -> str:
         """Synchronous wrapper for callers that are not running an event loop."""
