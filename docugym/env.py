@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import shutil
 from typing import Any, Literal, Protocol
@@ -8,6 +9,9 @@ import gymnasium as gym
 import numpy as np
 
 POLICY_CACHE_DIR = Path.home() / ".cache" / "docugym" / "policies"
+DEFAULT_TRUSTED_SB3_REPO_PREFIXES: tuple[str, ...] = ("sb3/",)
+
+logger = logging.getLogger(__name__)
 
 
 class Policy(Protocol):
@@ -139,8 +143,44 @@ def _load_policy_from_path(filename: str, model_path: Path) -> Policy:
     return loader.load(str(model_path), device="cpu")
 
 
-def load_sb3_policy(repo_id: str, filename: str) -> Policy:
-    """Download (if needed) and load an SB3 policy from Hugging Face Hub."""
+def _normalize_repo_prefixes(
+    trusted_repo_prefixes: list[str] | tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    if trusted_repo_prefixes is None:
+        return DEFAULT_TRUSTED_SB3_REPO_PREFIXES
+
+    normalized = tuple(prefix.strip() for prefix in trusted_repo_prefixes if prefix)
+    if not normalized:
+        return DEFAULT_TRUSTED_SB3_REPO_PREFIXES
+    return normalized
+
+
+def _is_trusted_repo(repo_id: str, trusted_prefixes: tuple[str, ...]) -> bool:
+    return any(repo_id.startswith(prefix) for prefix in trusted_prefixes)
+
+
+def load_sb3_policy(
+    repo_id: str,
+    filename: str,
+    *,
+    trusted_repo_prefixes: list[str] | tuple[str, ...] | None = None,
+    enforce_trusted_repo: bool = False,
+) -> Policy:
+    """Download and load an SB3 policy, with optional trust enforcement.
+
+    Stable-Baselines3 policy loading deserializes model artifacts. Loading an
+    untrusted policy can execute arbitrary code during deserialization.
+    """
+
+    trusted_prefixes = _normalize_repo_prefixes(trusted_repo_prefixes)
+    if not _is_trusted_repo(repo_id, trusted_prefixes):
+        message = (
+            "Untrusted SB3 repo id '%s' does not match trusted prefixes %s. "
+            "SB3 policy deserialization can execute arbitrary code."
+        )
+        if enforce_trusted_repo:
+            raise ValueError(message % (repo_id, trusted_prefixes))
+        logger.warning(message, repo_id, trusted_prefixes)
 
     cache_path = _resolve_cached_policy_path(repo_id=repo_id, filename=filename)
     model_path = _download_policy(
@@ -173,6 +213,8 @@ def run_smoketest(
     agent_kind: Literal["random", "scripted", "sb3"] = "random",
     sb3_repo_id: str | None = None,
     sb3_filename: str | None = None,
+    trusted_repo_prefixes: list[str] | tuple[str, ...] | None = None,
+    enforce_trusted_repo: bool = False,
 ) -> list[Path]:
     """Step an environment and persist rendered frames for smoke validation."""
 
@@ -190,7 +232,12 @@ def run_smoketest(
     elif agent_kind == "sb3":
         if sb3_repo_id is None or sb3_filename is None:
             raise ValueError("sb3_repo_id and sb3_filename are required for SB3 agent")
-        policy = load_sb3_policy(repo_id=sb3_repo_id, filename=sb3_filename)
+        policy = load_sb3_policy(
+            repo_id=sb3_repo_id,
+            filename=sb3_filename,
+            trusted_repo_prefixes=trusted_repo_prefixes,
+            enforce_trusted_repo=enforce_trusted_repo,
+        )
 
     frame_paths: list[Path] = []
 

@@ -28,6 +28,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
+      - name: Verify requirements export is up to date
+        run: |
+          uv export --format requirements.txt --group dev --no-emit-project --locked --output-file requirements.txt
+          git diff --exit-code -- requirements.txt
+
       - name: Ruff check
         run: uv run ruff check .
 

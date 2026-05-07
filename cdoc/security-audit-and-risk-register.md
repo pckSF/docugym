@@ -2,9 +2,9 @@
 type: reference
 tags: [security, audit, risk, supply-chain]
 created: 2026-04-20
-updated: 2026-04-26
+updated: 2026-05-07
 status: active
-related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md, betterleaks-secret-scanning-evaluation-and-tuning.md, audit-container-cli-hardening-evaluation.md]
+related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md, betterleaks-secret-scanning-evaluation-and-tuning.md, audit-container-cli-hardening-evaluation.md, stage-5-local-tts-streaming-audio.md]
 ---
 
 # Security Audit and Risk Register
@@ -41,6 +41,12 @@ networking assumptions change.
   - No Docker Compose `profiles:` entries were added or changed.
   - Existing `dev`/`runp` service isolation posture is unchanged from
     2026-04-23 (still writable bind mount `.:/app`).
+  - Added SB3 trusted-repo controls (allowlist + warning + optional strict
+    enforcement) in runtime and smoke-test policy loading paths.
+  - Constrained `scripts/serve_vlm.sh` to localhost by default via
+    `--host 127.0.0.1` and explicit env-var override support.
+  - Added CI guard in `.github/workflows/ci.yml` to fail when
+    `requirements.txt` drifts from lock-derived export.
 
 ### Critical findings
 
@@ -48,14 +54,18 @@ networking assumptions change.
 
 ### High-priority findings
 
-- Untrusted model/policy deserialization path in runtime policy loading.
-  - Location: `docugym/env.py` (`load_sb3_policy` -> `stable_baselines3.*.load`).
-  - Why it matters: model artifacts loaded by SB3 rely on Python deserialization
-    mechanics; loading untrusted artifacts can result in arbitrary code execution.
-  - Potential malware source: third-party or attacker-controlled model repository.
-  - Confidence: `likely`.
+- None currently identified.
 
 ### Medium-priority findings
+
+- Residual SB3 deserialization risk remains when trusted-repo enforcement is
+  disabled.
+  - Location: `docugym/env.py` + config-controlled
+    `agent.enforce_trusted_repo`.
+  - Why it matters: allowlist warnings reduce risk, but users can still choose
+    permissive mode for non-default repos.
+  - Potential malware source: third-party or attacker-controlled model repository.
+  - Confidence: `likely`.
 
 - Writable source bind mount (`.:/app`) allows repository modification from inside
   the dev container.
@@ -75,22 +85,20 @@ networking assumptions change.
   - Potential malware source: Python package index or transitive dependency takeover.
   - Confidence: `likely`.
 
-- VLM sidecar launch script does not explicitly constrain bind interface.
-  - Location: `scripts/serve_vlm.sh` (`vllm serve ... --port ...` with no
-    explicit host flag).
-  - Why it matters: endpoint exposure depends on vLLM defaults and host
-    networking context; if it binds broadly, generated frame data could be
-    requested from outside localhost.
-  - Potential malware source: opportunistic access from other local-network
-    systems when host firewalling is weak/misconfigured.
-  - Confidence: `likely`.
-
 ### Low-priority findings
 
 - `uvx` bootstrap for `ty` in pre-commit executes an externally fetched tool.
   - Location: `.pre-commit-config.yaml` (`uvx ty==0.0.32 check`).
   - Why it matters: additional supply-chain execution path in local developer flows.
   - Potential malware source: compromised package release or mirror.
+  - Confidence: `likely`.
+
+- VLM sidecar exposure can still broaden if users explicitly override
+  `DOCUGYM_VLM_HOST` away from localhost.
+  - Location: `scripts/serve_vlm.sh` (env override path).
+  - Why it matters: broader bind scope can expose local inference endpoints to
+    external network access depending on host firewall posture.
+  - Potential malware source: opportunistic local-network access.
   - Confidence: `likely`.
 
 ### Positive controls already present
@@ -117,9 +125,16 @@ networking assumptions change.
 - `requirements.txt` is exported from `uv.lock` with pinned versions and
   SHA-256 hashes, and omits editable project emission to preserve Docker
   bootstrap behavior.
+- `.github/workflows/ci.yml` now validates that `requirements.txt` remains
+  synchronized with lock-derived export semantics.
 - Stage 4 adds `httpx` runtime usage, and the dependency chain (`httpx`,
   `httpcore`, `anyio`, `h11`) is captured in lock-derived, hash-pinned
   `requirements.txt`.
+- SB3 policy loading now has trusted-repo controls (allowlist, warning on
+  untrusted repos, and opt-in strict enforcement) with explicit trust-risk
+  warnings in CLI help text.
+- `scripts/serve_vlm.sh` now binds to `127.0.0.1` by default, reducing
+  accidental network exposure of the local VLM endpoint.
 - A dedicated `audit` service runs dependency vulnerability checks in a more
   restricted container context (`read_only`, `tmpfs`, `no-new-privileges`,
   `cap_drop: ALL`, and read-only source mount).
@@ -164,10 +179,12 @@ networking assumptions change.
 - 2026-04-24: Refreshed Chainguard Python digest from `sha256:2c0fbbac…` to
   `sha256:18a4fbda…` (Python 3.14.4) after linter flagged outdated digest;
   verified via `docker pull cgr.dev/chainguard/python:latest`.
+- 2026-05-07: Updated after adding SB3 trusted-repo controls, localhost-default
+  VLM sidecar binding, and CI lock-export drift guard for `requirements.txt`.
 
 ## Tasks Derived From Findings
 
-- [ ] Add trust controls for SB3 model loading (allowlist trusted repos, warn on
+- [x] Add trust controls for SB3 model loading (allowlist trusted repos, warn on
   untrusted repo ids, and document deserialization risk explicitly in CLI help).
 - [x] Harden compose defaults by removing `seccomp=unconfined` and `ipc: host`
   from default services.
@@ -175,7 +192,7 @@ networking assumptions change.
   debug/perf workflows requiring weaker isolation.
 - [ ] Strengthen supply-chain controls (prefer lock-driven installs and add
   automated `pip-audit` or equivalent in CI).
-- [ ] Constrain VLM sidecar bind interface by default (for example,
+- [x] Constrain VLM sidecar bind interface by default (for example,
   `--host 127.0.0.1`) and document explicit opt-in for broader exposure.
 - [x] Replace runtime `pip install --user pip-audit` in `audit` with a pinned
   and reproducible audit tool path (for example, baked image or pinned artifact).
@@ -187,7 +204,7 @@ networking assumptions change.
   update process.
 - [ ] Enable repository or organization policy requiring full-length SHA pinning
   for GitHub Actions.
-- [ ] Add a CI check that fails if `requirements.txt` drifts from
+- [x] Add a CI check that fails if `requirements.txt` drifts from
   `uv export --format requirements.txt --group dev --no-emit-project --locked`.
 - [x] Add dependency update automation with cooldown policy (Dependabot or
   Renovate) for at least `github-actions` and `uv`/`pip` ecosystems.

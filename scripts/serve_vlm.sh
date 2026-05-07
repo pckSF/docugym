@@ -4,6 +4,7 @@ set -euo pipefail
 MODEL="${DOCUGYM_VLM_MODEL:-Qwen/Qwen3-VL-8B-Instruct-AWQ}"
 PORT="${DOCUGYM_VLM_PORT:-8000}"
 GPU_UTIL="${DOCUGYM_VLM_GPU_UTIL:-0.70}"
+HOST="${DOCUGYM_VLM_HOST:-127.0.0.1}"
 
 exec vllm serve "${MODEL}" \
   --max-model-len 4096 \
@@ -11,4 +12,5 @@ exec vllm serve "${MODEL}" \
   --gpu-memory-utilization "${GPU_UTIL}" \
   --mm-processor-cache-gb 0 \
   --dtype auto \
+  --host "${HOST}" \
   --port "${PORT}"

@@ -2,7 +2,7 @@
 type: reference
 tags: [networking, ports, services, infra]
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-05-07
 status: active
 related: [stage-3-display-layer.md, security-audit-and-risk-register.md, devcontainer-security-settings-review.md]
 ---
@@ -23,6 +23,8 @@ what should be called, and which links are currently only planned.
 - No long-running API server is started by default in the current stages.
 - In current devcontainer runs, `localhost:8000` is typically not listening
   unless a VLM sidecar is launched manually.
+- `scripts/serve_vlm.sh` now binds the sidecar to `127.0.0.1` by default
+  (`DOCUGYM_VLM_HOST` override available for explicit broader exposure).
 
 ### Configured local endpoint (not always running)
 
@@ -62,3 +64,5 @@ what should be called, and which links are currently only planned.
 - 2026-04-20: Created.
 - 2026-04-20: Linked rolling security audit reference note.
 - 2026-04-20: Linked devcontainer security settings decision note.
+- 2026-05-07: Updated VLM sidecar binding behavior to localhost-default with
+  explicit env override path.

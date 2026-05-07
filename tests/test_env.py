@@ -6,6 +6,7 @@ import types
 from typing import cast
 
 import numpy as np
+import pytest
 
 from docugym.env import (
     POLICY_CACHE_DIR,
@@ -205,3 +206,82 @@ def test_run_smoketest_saves_requested_number_of_frames(
 
 def test_policy_cache_dir_constant_uses_home() -> None:
     assert isinstance(POLICY_CACHE_DIR, Path)
+
+
+def test_load_sb3_policy_warns_on_untrusted_repo(
+    monkeypatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    repo_id = "evil-org/ppo-LunarLander-v2"
+    filename = "ppo-LunarLander-v2.zip"
+
+    downloaded = tmp_path / "downloaded.zip"
+    downloaded.write_text("model", encoding="utf-8")
+
+    hf_module = types.ModuleType("huggingface_sb3")
+    setattr(
+        hf_module,
+        "load_from_hub",
+        lambda *, repo_id, filename: str(downloaded),
+    )
+
+    sb3_module = types.ModuleType("stable_baselines3")
+    setattr(sb3_module, "A2C", DummyAlgo)
+    setattr(sb3_module, "DQN", DummyAlgo)
+    setattr(sb3_module, "PPO", DummyAlgo)
+    setattr(sb3_module, "SAC", DummyAlgo)
+    setattr(sb3_module, "TD3", DummyAlgo)
+
+    monkeypatch.setitem(sys.modules, "huggingface_sb3", hf_module)
+    monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
+    monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
+    DummyAlgo.load_calls = []
+
+    caplog.set_level("WARNING", logger="docugym.env")
+
+    _ = load_sb3_policy(
+        repo_id=repo_id,
+        filename=filename,
+        trusted_repo_prefixes=["sb3/"],
+        enforce_trusted_repo=False,
+    )
+
+    assert "Untrusted SB3 repo id" in caplog.text
+
+
+def test_load_sb3_policy_rejects_untrusted_repo_when_enforced(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_id = "evil-org/ppo-LunarLander-v2"
+    filename = "ppo-LunarLander-v2.zip"
+
+    downloaded = tmp_path / "downloaded.zip"
+    downloaded.write_text("model", encoding="utf-8")
+
+    hf_module = types.ModuleType("huggingface_sb3")
+    setattr(
+        hf_module,
+        "load_from_hub",
+        lambda *, repo_id, filename: str(downloaded),
+    )
+
+    sb3_module = types.ModuleType("stable_baselines3")
+    setattr(sb3_module, "A2C", DummyAlgo)
+    setattr(sb3_module, "DQN", DummyAlgo)
+    setattr(sb3_module, "PPO", DummyAlgo)
+    setattr(sb3_module, "SAC", DummyAlgo)
+    setattr(sb3_module, "TD3", DummyAlgo)
+
+    monkeypatch.setitem(sys.modules, "huggingface_sb3", hf_module)
+    monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
+    monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
+
+    with pytest.raises(ValueError, match="Untrusted SB3 repo id"):
+        _ = load_sb3_policy(
+            repo_id=repo_id,
+            filename=filename,
+            trusted_repo_prefixes=["sb3/"],
+            enforce_trusted_repo=True,
+        )
