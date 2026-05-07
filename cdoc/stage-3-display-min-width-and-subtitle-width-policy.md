@@ -4,7 +4,7 @@ tags: [stage-3, display, readability, subtitle, pygame, layout]
 created: 2026-04-24
 updated: 2026-04-24
 status: active
-related: [stage-3-display-layer.md, 2026-04-24-stage-3-display-follow-up-validation-and-text-bands.md]
+related: [stage-3-display-layer.md, 2026-04-24-stage-3-display-follow-up-validation-and-text-bands.md, stage-7-ui-polish-and-keyboard-controls.md]
 ---
 
 # Stage 3 Display Min Width And Subtitle Width Policy
@@ -89,3 +89,4 @@ width controls.
 ## Changelog
 
 - 2026-04-24: Created.
+- 2026-05-07: Linked Stage 7 UI and keyboard-controls decision note.

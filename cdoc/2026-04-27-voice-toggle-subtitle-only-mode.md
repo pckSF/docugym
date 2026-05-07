@@ -4,7 +4,7 @@ tags: [narration, tts, subtitles, performance, testing, stage-5]
 created: 2026-04-27
 updated: 2026-04-27
 status: active
-related: [stage-4-vlm-narration-sync.md, stage-3-display-layer.md, stage-5-local-tts-streaming-audio.md, stage-6-async-orchestration-and-keyframe-selection.md]
+related: [stage-4-vlm-narration-sync.md, stage-3-display-layer.md, stage-5-local-tts-streaming-audio.md, stage-6-async-orchestration-and-keyframe-selection.md, stage-7-ui-polish-and-keyboard-controls.md]
 ---
 
 # 2026-04-27 Voice Toggle and Subtitle-Only Mode
@@ -77,3 +77,4 @@ example `tts.enabled`) defaulting to enabled.
   for voice toggle and subtitle-only mode.
 - 2026-05-07: Linked Stage 6 implementation note documenting async orchestration
   while preserving subtitle-only operation.
+- 2026-05-07: Linked Stage 7 UI note documenting runtime mute shortcut behavior.

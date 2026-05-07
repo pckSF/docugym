@@ -4,7 +4,7 @@ tags: [stage-6, runtime, asyncio, keyframes, narration, backpressure]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-5-local-tts-streaming-audio.md, stage-4-vlm-narration-sync.md, 2026-04-27-voice-toggle-subtitle-only-mode.md]
+related: [stage-5-local-tts-streaming-audio.md, stage-4-vlm-narration-sync.md, 2026-04-27-voice-toggle-subtitle-only-mode.md, stage-7-ui-polish-and-keyboard-controls.md]
 ---
 
 # Stage 6 Async Orchestration and Keyframe Selection
@@ -134,3 +134,4 @@ and process-lifecycle complexity.
 
 - 2026-05-07: Created Stage 6 decision note documenting async orchestration,
   keyframe selection heuristics, backpressure policy, CLI wiring, and tests.
+- 2026-05-07: Linked Stage 7 UI and keyboard-controls decision note.
