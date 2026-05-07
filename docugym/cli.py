@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import typer
+import yaml
 
 from docugym.config import AppSettings, load_settings
 from docugym.display import run_display_smoketest
@@ -21,6 +22,43 @@ app = typer.Typer(
     help="DocuGym CLI for local narrated Gymnasium runs.",
 )
 logger = logging.getLogger(__name__)
+
+_KOKORO_BRITISH_VOICE_SAMPLES: tuple[tuple[str, str], ...] = (
+    (
+        "bm_george",
+        'Sample: "With patient calm, the explorer weighs its next move."',
+    ),
+    (
+        "bm_fable",
+        'Sample: "A brief hush, then the hunt resumes in measured rhythm."',
+    ),
+    (
+        "bm_lewis",
+        'Sample: "Across uncertain ground, instinct and timing decide survival."',
+    ),
+    (
+        "bm_daniel",
+        'Sample: "The pace softens, as if the world itself is listening."',
+    ),
+    (
+        "bf_alice",
+        'Sample: "At the boundary of danger, composure is everything."',
+    ),
+    (
+        "bf_emma",
+        'Sample: "A graceful turn reveals the creature\'s quiet intent."',
+    ),
+    (
+        "bf_isabella",
+        'Sample: "In this fragile interval, each motion carries consequence."',
+    ),
+    (
+        "bf_lily",
+        'Sample: "One careful adjustment, and balance returns to the scene."',
+    ),
+)
+
+_STAGE8_PRESET_NAMES: tuple[str, ...] = ("atari", "lunarlander", "carracing")
 
 
 @dataclass(slots=True)
@@ -52,6 +90,15 @@ def _parse_env_kwargs(value: str | None) -> dict[str, Any]:
     return dict(parsed)
 
 
+def _load_preset_settings(config_path: Path) -> AppSettings:
+    raw_data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if raw_data is None:
+        raw_data = {}
+    if not isinstance(raw_data, dict):
+        raise ValueError("Preset config must decode to a YAML mapping")
+    return AppSettings.model_validate(raw_data)
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
@@ -80,6 +127,40 @@ def show_config(ctx: typer.Context) -> None:
 
     settings = _get_state(ctx).settings
     typer.echo(json.dumps(settings.model_dump(mode="json"), indent=2))
+
+
+@app.command("list-voices")
+def list_voices() -> None:
+    """Print Kokoro's supported British voices with short sample lines."""
+
+    typer.echo("Kokoro British voices:")
+    for voice_id, sample in _KOKORO_BRITISH_VOICE_SAMPLES:
+        typer.echo(f"- {voice_id}: {sample}")
+
+
+@app.command("list-envs")
+def list_envs() -> None:
+    """Print Stage 8 environment presets shipped in configs/."""
+
+    config_dir = Path("configs")
+    typer.echo("Supported env presets:")
+
+    found = False
+    for preset_name in _STAGE8_PRESET_NAMES:
+        preset_path = config_dir / f"{preset_name}.yaml"
+        if not preset_path.exists():
+            continue
+        settings = _load_preset_settings(preset_path)
+        policy = settings.agent.sb3_repo_id if settings.agent.kind == "sb3" else "n/a"
+        typer.echo(
+            "- "
+            f"{preset_name}: env={settings.run.env_id} "
+            f"agent={settings.agent.kind} policy={policy}"
+        )
+        found = True
+
+    if not found:
+        typer.echo("- no Stage 8 presets found in configs/")
 
 
 @app.command("smoketest")

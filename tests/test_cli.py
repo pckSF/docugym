@@ -536,3 +536,37 @@ tts:
 
     assert result.exit_code == 0
     assert captured["voice_enabled"] is False
+
+
+def test_list_voices_prints_all_stage8_kokoro_voices(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text('run:\n  env_id: "CartPole-v1"\n', encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["--config", str(config_path), "list-voices"])
+
+    assert result.exit_code == 0
+    for voice_id in (
+        "bm_george",
+        "bm_fable",
+        "bm_lewis",
+        "bm_daniel",
+        "bf_alice",
+        "bf_emma",
+        "bf_isabella",
+        "bf_lily",
+    ):
+        assert voice_id in result.output
+
+
+def test_list_envs_prints_stage8_presets(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text('run:\n  env_id: "CartPole-v1"\n', encoding="utf-8")
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["--config", str(config_path), "list-envs"])
+
+    assert result.exit_code == 0
+    assert "atari" in result.output
+    assert "lunarlander" in result.output
+    assert "carracing" in result.output
