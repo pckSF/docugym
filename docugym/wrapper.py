@@ -23,6 +23,7 @@ from docugym.narration_events import (
     join_recent_events,
 )
 from docugym.narrator import NarrationContext, VLMNarrator
+from docugym.queue_utils import drain_latest_sync, push_drop_oldest_sync
 from docugym.tts import KokoroTTS, SpeechSentence
 
 logger = logging.getLogger(__name__)
@@ -77,23 +78,6 @@ def _save_clip_snapshot(
     _save_frame_png(frame=frame, path=frame_path)
     narration_path.write_text(f"{narration.strip()}\n", encoding="utf-8")
     return frame_path, narration_path
-
-
-def _push_drop_oldest_queue(queue_obj: queue.Queue[Any], item: Any) -> bool:
-    dropped = False
-    if queue_obj.full():
-        try:
-            _ = queue_obj.get_nowait()
-            dropped = True
-        except queue.Empty:
-            dropped = False
-
-    try:
-        queue_obj.put_nowait(item)
-    except queue.Full:
-        dropped = True
-
-    return dropped
 
 
 def _resolve_env_id(env: gym.Env[Any, Any], env_id: str | None) -> str:
@@ -459,7 +443,7 @@ class DocuWrapper(gym.Wrapper):
             logger.warning("Ignoring %s callback failure: %s", name, exc)
 
     def _push_subtitle(self, text: str) -> None:
-        dropped = _push_drop_oldest_queue(self._subtitle_queue, text)
+        dropped = push_drop_oldest_sync(self._subtitle_queue, text)
         if dropped:
             logger.info("Dropped stale subtitle update due queue pressure")
 
@@ -472,16 +456,8 @@ class DocuWrapper(gym.Wrapper):
                 name="on_subtitle",
             )
 
-    def _drain_latest_subtitle(self) -> str | None:
-        latest: str | None = None
-        while True:
-            try:
-                latest = self._subtitle_queue.get_nowait()
-            except queue.Empty:
-                return latest
-
     def _render_current_frame(self, frame: np.ndarray) -> None:
-        subtitle = self._drain_latest_subtitle()
+        subtitle = drain_latest_sync(self._subtitle_queue)
         if isinstance(subtitle, str):
             self._display.set_subtitle(subtitle)
 
@@ -618,7 +594,7 @@ class DocuWrapper(gym.Wrapper):
         with self._stats_lock:
             previous_narration = join_previous_narrations(self._previous_narrations)
 
-        dropped = _push_drop_oldest_queue(
+        dropped = push_drop_oldest_sync(
             self._narration_queue,
             _NarrationRequest(
                 frame=np.array(frame, copy=True),

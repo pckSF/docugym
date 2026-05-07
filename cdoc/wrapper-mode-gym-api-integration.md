@@ -59,6 +59,17 @@ adding live DocuGym narration/subtitles and command-like toggles as constructor 
 - Added `tests/test_narration_events.py` to lock event-summary formatting and
   context-join behavior.
 
+### Implemented Phase 4 Outcome
+
+- Extracted shared queue helper primitives into `docugym/queue_utils.py` for both
+  asyncio queues and thread-safe sync queues (`push_drop_oldest_*`,
+  `drain_latest_*`, `clear_async_queue`).
+- Updated `docugym/runtime.py` to use shared async queue helpers for frame,
+  display, narration, subtitle, and TTS queue operations.
+- Updated `docugym/wrapper.py` to use shared sync queue helpers for subtitle
+  and narration candidate queue handling.
+- Added `tests/test_queue_utils.py` to lock queue drop/drain semantics.
+
 ## Options Considered
 
 #### Option 1: Keep CLI-only production surface
@@ -105,3 +116,5 @@ recommended production path for recording and full run management.
   between wrapper and canonical runtime paths.
 - 2026-05-07: Updated for Phase 3 refactor that shares narration-event formatting
   and context-string assembly between wrapper and canonical runtime paths.
+- 2026-05-07: Updated for Phase 4 refactor that shares queue drop/drain helpers
+  between wrapper and canonical runtime paths.

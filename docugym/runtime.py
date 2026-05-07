@@ -36,6 +36,11 @@ from docugym.narration_events import (
     join_recent_events,
 )
 from docugym.narrator import NarrationContext
+from docugym.queue_utils import (
+    clear_async_queue,
+    drain_latest_async,
+    push_drop_oldest_async,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -186,14 +191,6 @@ def _poll_display_actions(display: Any) -> list[DisplayAction]:
     return actions
 
 
-def _clear_asyncio_queue(queue_obj: asyncio.Queue[Any]) -> None:
-    while True:
-        try:
-            _ = queue_obj.get_nowait()
-        except asyncio.QueueEmpty:
-            return
-
-
 def _clear_audio_buffer(audio_output: AudioOutputClient) -> None:
     clear = getattr(audio_output, "clear", None)
     if callable(clear):
@@ -229,38 +226,6 @@ def _save_clip_snapshot(
     _save_frame_png(frame=frame, path=frame_path)
     narration_path.write_text(f"{narration.strip()}\n", encoding="utf-8")
     return frame_path, narration_path
-
-
-def _push_drop_oldest(queue_obj: asyncio.Queue[Any], item: Any) -> bool:
-    """Enqueue without blocking, dropping the oldest queued item when full."""
-
-    dropped = False
-    if queue_obj.full():
-        try:
-            _ = queue_obj.get_nowait()
-            dropped = True
-        except asyncio.QueueEmpty:
-            dropped = False
-
-    try:
-        queue_obj.put_nowait(item)
-    except asyncio.QueueFull:
-        dropped = True
-
-    return dropped
-
-
-def _drain_latest(
-    queue_obj: asyncio.Queue[Any],
-    initial: Any | None = None,
-) -> Any | None:
-    latest = initial
-    while True:
-        try:
-            latest = queue_obj.get_nowait()
-        except asyncio.QueueEmpty:
-            break
-    return latest
 
 
 async def _narrate_async(
@@ -501,8 +466,8 @@ async def run_session(
                 timestamp=timestamp,
             )
 
-            _ = _push_drop_oldest(frame_q, frame_event)
-            _ = _push_drop_oldest(
+            _ = push_drop_oldest_async(frame_q, frame_event)
+            _ = push_drop_oldest_async(
                 display_q,
                 _DisplayEvent(
                     frame=frame,
@@ -565,7 +530,7 @@ async def run_session(
             )
             recent_events.append(event_summary)
 
-            dropped = _push_drop_oldest(
+            dropped = push_drop_oldest_async(
                 narration_q,
                 _NarrationCandidate(
                     frame=frame_event.frame,
@@ -623,10 +588,10 @@ async def run_session(
             previous_narrations.append(narration)
             latest_narration_text = narration
 
-            _ = _push_drop_oldest(subtitle_q, narration)
+            _ = push_drop_oldest_async(subtitle_q, narration)
 
             if tts_active and active_speaker is not None and not audio_muted:
-                dropped_tts = _push_drop_oldest(tts_q, narration)
+                dropped_tts = push_drop_oldest_async(tts_q, narration)
                 if dropped_tts:
                     dropped_narration_candidates += 1
                     logger.info(
@@ -670,7 +635,7 @@ async def run_session(
 
                         subtitle_text = sentence.graphemes.strip()
                         if subtitle_text:
-                            _ = _push_drop_oldest(subtitle_q, subtitle_text)
+                            _ = push_drop_oldest_async(subtitle_q, subtitle_text)
                         for chunk in sentence.chunks:
                             if active_recorder is not None:
                                 try:
@@ -703,11 +668,11 @@ async def run_session(
         latest_display: _DisplayEvent | None = None
 
         while not stop_event.is_set():
-            subtitle = _drain_latest(subtitle_q)
+            subtitle = drain_latest_async(subtitle_q)
             if isinstance(subtitle, str):
                 display.set_subtitle(subtitle)
 
-            latest_display = _drain_latest(display_q, latest_display)
+            latest_display = drain_latest_async(display_q, latest_display)
             if latest_display is None:
                 await asyncio.sleep(0.01)
                 continue
@@ -741,7 +706,7 @@ async def run_session(
                     audio_muted = not audio_muted
                     _set_display_flag(display, "set_muted", audio_muted)
                     if audio_muted:
-                        _clear_asyncio_queue(tts_q)
+                        clear_async_queue(tts_q)
                         if active_audio_output is not None:
                             _clear_audio_buffer(active_audio_output)
                     logger.info("Playback mute toggled: muted=%s", audio_muted)
@@ -756,7 +721,7 @@ async def run_session(
                         triggers=["manual"],
                     )
                     recent_events.append(event_summary)
-                    dropped = _push_drop_oldest(
+                    dropped = push_drop_oldest_async(
                         narration_q,
                         _NarrationCandidate(
                             frame=latest_display.frame,
