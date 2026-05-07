@@ -4,7 +4,7 @@ tags: [stage-4, narration, vlm, vllm, httpx, sync]
 created: 2026-04-24
 updated: 2026-04-24
 status: active
-related: [stage-3-display-layer.md, networking-ports-and-services.md, 2026-04-24-litellm-supply-chain-exposure-review.md, stage-5-local-tts-streaming-audio.md]
+related: [stage-3-display-layer.md, networking-ports-and-services.md, 2026-04-24-litellm-supply-chain-exposure-review.md, stage-5-local-tts-streaming-audio.md, stage-6-async-orchestration-and-keyframe-selection.md]
 ---
 
 # Stage 4 VLM Narration (Synchronous First)
@@ -118,3 +118,5 @@ dependency/proxy layer and keeps the trust boundary small.
   sidecar script, CLI run command, latency telemetry, and test coverage.
 - 2026-05-07: Linked Stage 5 decision note for local TTS/audio and voice-toggle
   follow-on implementation.
+- 2026-05-07: Linked Stage 6 decision note for async orchestration and keyframe
+  selection follow-on implementation.
