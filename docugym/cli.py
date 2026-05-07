@@ -429,6 +429,14 @@ def run(
             "narration mode."
         ),
     ),
+    record: Path | None = typer.Option(
+        None,
+        "--record",
+        help=(
+            "Optional MP4 output path for live session recording. "
+            "When omitted, config recording.enabled/out_path is used."
+        ),
+    ),
     wait_for_vlm: bool = typer.Option(
         False,
         "--wait-for-vlm",
@@ -472,6 +480,12 @@ def run(
         config.display.text_bands if text_bands is None else text_bands
     )
     effective_voice = config.tts.enabled if voice is None else voice
+    effective_record_out_path: Path | None = None
+    if record is not None:
+        effective_record_out_path = record
+    elif config.recording.enabled:
+        effective_record_out_path = Path(config.recording.out_path)
+
     effective_interval_seconds = config.narration.interval_seconds
     if narrate_every is not None:
         effective_interval_seconds = narrate_every / float(effective_fps)
@@ -542,6 +556,7 @@ def run(
         tts_voice=config.tts.kokoro.voice,
         tts_speed=config.tts.kokoro.speed,
         tts_sample_rate=config.tts.kokoro.sample_rate,
+        record_out_path=effective_record_out_path,
         max_steps=steps,
         max_episodes=config.run.max_episodes,
     )

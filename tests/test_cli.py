@@ -410,6 +410,7 @@ display:
         "repeat_action_probability": 0.1,
     }
     assert captured["wait_kwargs"] == {"timeout_seconds": 3.0}
+    assert captured["record_out_path"] is None
 
 
 def test_run_policy_shorthand_implies_sb3(monkeypatch, tmp_path: Path) -> None:
@@ -536,6 +537,134 @@ tts:
 
     assert result.exit_code == 0
     assert captured["voice_enabled"] is False
+
+
+def test_run_record_flag_overrides_config(monkeypatch, tmp_path: Path) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+  env_id: "ALE/Pong-v5"
+agent:
+  kind: "random"
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+recording:
+  enabled: true
+  out_path: "out/from-config.mp4"
+""",
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeNarrator:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    class FakeResult:
+        rendered_steps = 1
+        narration_count = 0
+        latency_p50_ms = None
+        latency_p95_ms = None
+        dropped_narration_candidates = 0
+
+    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
+        captured.update(kwargs)
+        return FakeResult()
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+    monkeypatch.setattr(
+        "docugym.cli.run_stage6_session_sync",
+        fake_run_stage6_session_sync,
+    )
+
+    out_path = tmp_path / "manual-record.mp4"
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "run",
+            "--record",
+            str(out_path),
+            "--steps",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["record_out_path"] == out_path
+
+
+def test_run_uses_config_recording_path_when_enabled(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+  env_id: "ALE/Pong-v5"
+agent:
+  kind: "random"
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+recording:
+  enabled: true
+  out_path: "out/from-config.mp4"
+""",
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeNarrator:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    class FakeResult:
+        rendered_steps = 1
+        narration_count = 0
+        latency_p50_ms = None
+        latency_p95_ms = None
+        dropped_narration_candidates = 0
+
+    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
+        captured.update(kwargs)
+        return FakeResult()
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+    monkeypatch.setattr(
+        "docugym.cli.run_stage6_session_sync",
+        fake_run_stage6_session_sync,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "run",
+            "--steps",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["record_out_path"] == Path("out/from-config.mp4")
 
 
 def test_list_voices_prints_all_stage8_kokoro_voices(tmp_path: Path) -> None:

@@ -129,6 +129,20 @@ class AudioOutputClient(Protocol):
         """Stop and release audio stream resources."""
 
 
+@runtime_checkable
+class SessionRecorderClient(Protocol):
+    """Recorder sink contract used by Stage 9 runtime integration."""
+
+    def write_video_frame(self, frame: np.ndarray) -> None:
+        """Append one rendered frame to the recording stream."""
+
+    def write_audio_chunk(self, chunk: np.ndarray, *, timestamp: float) -> None:
+        """Append one synthesized audio chunk at a monotonic timestamp."""
+
+    def close(self, *, end_timestamp: float) -> Path | None:
+        """Finalize recording artifacts and return saved output path."""
+
+
 def run_stage4_session(
     *,
     env_id: str,
@@ -539,6 +553,9 @@ async def run_stage6_session(
     tts_sample_rate: int = 24_000,
     speaker: AsyncSpeakerClient | SpeakerClient | None = None,
     audio_output: AudioOutputClient | None = None,
+    record_out_path: Path | None = None,
+    recorder: SessionRecorderClient | None = None,
+    ffmpeg_binary: str = "ffmpeg",
     max_steps: int | None = None,
     max_episodes: int | None = None,
     on_narration: Callable[[str, int, float], None] | None = None,
@@ -590,7 +607,18 @@ async def run_stage6_session(
 
     active_speaker = speaker
     active_audio_output = audio_output
+    active_recorder = recorder
     tts_active = voice_enabled
+
+    if active_recorder is None and record_out_path is not None:
+        from docugym.recording import FFmpegSessionRecorder
+
+        active_recorder = FFmpegSessionRecorder(
+            out_path=record_out_path,
+            fps=fps,
+            sample_rate=tts_sample_rate,
+            ffmpeg_binary=ffmpeg_binary,
+        )
 
     if voice_enabled:
         try:
@@ -848,7 +876,7 @@ async def run_stage6_session(
             await asyncio.sleep(0)
 
     async def tts_task() -> None:
-        nonlocal audio_muted
+        nonlocal active_recorder, audio_muted
 
         if not tts_active or active_speaker is None or active_audio_output is None:
             return
@@ -873,6 +901,18 @@ async def run_stage6_session(
                         if subtitle_text:
                             _ = _push_drop_oldest(subtitle_q, subtitle_text)
                         for chunk in sentence.chunks:
+                            if active_recorder is not None:
+                                try:
+                                    active_recorder.write_audio_chunk(
+                                        chunk,
+                                        timestamp=perf_counter(),
+                                    )
+                                except Exception as exc:
+                                    logger.warning(
+                                        "Disabling recording after audio failure: %s",
+                                        exc,
+                                    )
+                                    active_recorder = None
                             active_audio_output.enqueue(chunk)
                         if stop_event.is_set():
                             break
@@ -887,7 +927,7 @@ async def run_stage6_session(
             await asyncio.sleep(0)
 
     async def display_task() -> None:
-        nonlocal paused, audio_muted, dropped_narration_candidates
+        nonlocal active_recorder, paused, audio_muted, dropped_narration_candidates
 
         latest_display: _DisplayEvent | None = None
 
@@ -908,6 +948,16 @@ async def run_stage6_session(
             if not display.blit_frame(latest_display.frame):
                 stop_event.set()
                 break
+
+            if active_recorder is not None:
+                try:
+                    active_recorder.write_video_frame(latest_display.frame)
+                except Exception as exc:
+                    logger.warning(
+                        "Disabling recording after video write failure: %s",
+                        exc,
+                    )
+                    active_recorder = None
 
             for action in _poll_display_actions(display):
                 if action == "toggle_pause":
@@ -987,6 +1037,13 @@ async def run_stage6_session(
         await asyncio.gather(*tasks, return_exceptions=True)
         if tts_active and active_audio_output is not None:
             active_audio_output.stop()
+        if active_recorder is not None:
+            try:
+                saved_path = active_recorder.close(end_timestamp=perf_counter())
+                if saved_path is None:
+                    logger.info("Recording discarded because no frames were rendered")
+            except Exception as exc:
+                logger.warning("Failed to finalize recording: %s", exc)
         display.close()
         env.close()
 

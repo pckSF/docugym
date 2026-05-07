@@ -149,6 +149,26 @@ class FakeAudioOutput:
         self.stopped = True
 
 
+class FakeRecorder:
+    def __init__(self) -> None:
+        self.video_frames: list[np.ndarray] = []
+        self.audio_chunks: list[np.ndarray] = []
+        self.closed = False
+        self.closed_at: float | None = None
+
+    def write_video_frame(self, frame: np.ndarray) -> None:
+        self.video_frames.append(np.array(frame, copy=True))
+
+    def write_audio_chunk(self, chunk: np.ndarray, *, timestamp: float) -> None:
+        del timestamp
+        self.audio_chunks.append(np.array(chunk, copy=True))
+
+    def close(self, *, end_timestamp: float) -> Path | None:
+        self.closed = True
+        self.closed_at = end_timestamp
+        return Path("out/session.mp4")
+
+
 class AsyncFakeNarrator:
     def __init__(self, delay_seconds: float = 0.0) -> None:
         self.delay_seconds = delay_seconds
@@ -486,3 +506,132 @@ def test_run_stage6_session_shortcuts_mute_and_save_clip(monkeypatch) -> None:
     assert saved_calls
     assert saved_calls[0][1]
     assert True in display.muted_states
+
+
+def test_run_stage6_session_records_frames_and_audio(monkeypatch) -> None:
+    env = DummyEnv()
+
+    def fake_make_env(**_kwargs: Any) -> DummyEnv:
+        return env
+
+    def fake_display(**kwargs: Any) -> FakeDisplay:
+        return FakeDisplay(**kwargs)
+
+    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
+    monkeypatch.setattr("docugym.runtime.Display", fake_display)
+
+    narrator = AsyncFakeNarrator()
+    speaker = FakeSpeaker()
+    audio_output = FakeAudioOutput()
+    recorder = FakeRecorder()
+
+    result = run_stage6_session_sync(
+        env_id="ALE/Pong-v5",
+        seed=5,
+        fps=60,
+        window_scale=3,
+        subtitle_font="DejaVu Sans",
+        subtitle_size=22,
+        subtitle_max_text_width=960,
+        hud=True,
+        text_bands=True,
+        min_window_width=960,
+        env_kwargs={},
+        narrator=narrator,
+        narration_interval_seconds=999.0,
+        min_gap_seconds=0.0,
+        reward_spike_threshold=0.5,
+        pixel_delta_threshold=999.0,
+        max_context_events=3,
+        previous_narration_window=2,
+        agent_kind="random",
+        sb3_repo_id=None,
+        sb3_filename=None,
+        voice_enabled=True,
+        speaker=speaker,
+        audio_output=audio_output,
+        recorder=recorder,
+        max_steps=6,
+    )
+
+    assert result.rendered_steps == 6
+    assert recorder.video_frames
+    assert recorder.audio_chunks
+    assert recorder.closed is True
+    assert recorder.closed_at is not None
+
+
+def test_run_stage6_session_builds_ffmpeg_recorder_from_output_path(
+    monkeypatch,
+) -> None:
+    env = DummyEnv()
+    created: dict[str, object] = {}
+
+    def fake_make_env(**_kwargs: Any) -> DummyEnv:
+        return env
+
+    def fake_display(**kwargs: Any) -> FakeDisplay:
+        return FakeDisplay(**kwargs)
+
+    class FakeFFmpegRecorder(FakeRecorder):
+        def __init__(
+            self,
+            *,
+            out_path: Path,
+            fps: int,
+            sample_rate: int,
+            ffmpeg_binary: str = "ffmpeg",
+        ) -> None:
+            super().__init__()
+            created.update(
+                {
+                    "out_path": out_path,
+                    "fps": fps,
+                    "sample_rate": sample_rate,
+                    "ffmpeg_binary": ffmpeg_binary,
+                }
+            )
+
+    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
+    monkeypatch.setattr("docugym.runtime.Display", fake_display)
+    monkeypatch.setattr(
+        "docugym.recording.FFmpegSessionRecorder",
+        FakeFFmpegRecorder,
+    )
+
+    narrator = AsyncFakeNarrator()
+
+    result = run_stage6_session_sync(
+        env_id="ALE/Pong-v5",
+        seed=5,
+        fps=45,
+        window_scale=3,
+        subtitle_font="DejaVu Sans",
+        subtitle_size=22,
+        subtitle_max_text_width=960,
+        hud=True,
+        text_bands=True,
+        min_window_width=960,
+        env_kwargs={},
+        narrator=narrator,
+        narration_interval_seconds=999.0,
+        min_gap_seconds=0.0,
+        reward_spike_threshold=999.0,
+        pixel_delta_threshold=999.0,
+        max_context_events=3,
+        previous_narration_window=2,
+        agent_kind="random",
+        sb3_repo_id=None,
+        sb3_filename=None,
+        voice_enabled=False,
+        record_out_path=Path("out/stage9-test.mp4"),
+        max_steps=3,
+    )
+
+    assert result.rendered_steps == 3
+    assert created == {
+        "out_path": Path("out/stage9-test.mp4"),
+        "fps": 45,
+        "sample_rate": 24000,
+        "ffmpeg_binary": "ffmpeg",
+    }
