@@ -163,3 +163,29 @@ def test_compute_subtitle_wrap_width_caps_wide_windows() -> None:
         )
         == 616
     )
+
+
+def test_build_status_text_includes_runtime_indicators() -> None:
+    status = Display._build_status_text(
+        env_id="ALE/Pong-v5",
+        step=12,
+        episode_reward=3.25,
+        narrating=True,
+        paused=False,
+        muted=True,
+    )
+
+    assert "env: ALE/Pong-v5" in status
+    assert "step: 12" in status
+    assert "episode reward: 3.25" in status
+    assert "narrating" in status
+    assert "running" in status
+    assert "audio: muted" in status
+
+
+def test_key_to_action_maps_stage7_shortcuts() -> None:
+    assert Display._key_to_action(32) == "toggle_pause"
+    assert Display._key_to_action(110) == "force_narrate"
+    assert Display._key_to_action(109) == "toggle_mute"
+    assert Display._key_to_action(115) == "save_clip"
+    assert Display._key_to_action(999999) is None

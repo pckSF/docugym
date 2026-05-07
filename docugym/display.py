@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pygame
 
 from docugym.env import RandomAgent, make_env
+
+DisplayAction = Literal[
+    "toggle_pause",
+    "force_narrate",
+    "toggle_mute",
+    "save_clip",
+]
 
 
 class Display:
@@ -44,7 +51,11 @@ class Display:
         self._subtitle = ""
         self._step = 0
         self._episode_reward = 0.0
+        self._narrating = False
+        self._paused = False
+        self._muted = False
         self._is_open = True
+        self._pending_actions: list[DisplayAction] = []
 
         self._window: pygame.Surface | None = None
         self._render_size: tuple[int, int] | None = None
@@ -80,6 +91,28 @@ class Display:
 
         self._step = step
         self._episode_reward = episode_reward
+
+    def set_narrating(self, active: bool) -> None:
+        """Update HUD narration activity indicator."""
+
+        self._narrating = active
+
+    def set_paused(self, paused: bool) -> None:
+        """Update HUD pause indicator."""
+
+        self._paused = paused
+
+    def set_muted(self, muted: bool) -> None:
+        """Update HUD audio muted indicator."""
+
+        self._muted = muted
+
+    def poll_actions(self) -> list[DisplayAction]:
+        """Return and clear pending keyboard-triggered display actions."""
+
+        actions = list(self._pending_actions)
+        self._pending_actions.clear()
+        return actions
 
     def blit_frame(self, frame: np.ndarray) -> bool:
         """Draw a frame, text overlays or bands, and pace to the configured FPS."""
@@ -144,18 +177,29 @@ class Display:
                 self._is_open = False
                 return
 
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            if event.type != pygame.KEYDOWN:
+                continue
+
+            if event.key == pygame.K_ESCAPE:
                 self._is_open = False
                 return
+
+            action = self._key_to_action(event.key)
+            if action is not None:
+                self._pending_actions.append(action)
 
     def _draw_status_bar(self, y: int, band_height: int = 0) -> None:
         if self._window is None:
             return
 
         width = self._window.get_width()
-        text = (
-            f"env: {self._env_id} | step: {self._step} "
-            f"| episode reward: {self._episode_reward:.2f}"
+        text = self._build_status_text(
+            env_id=self._env_id,
+            step=self._step,
+            episode_reward=self._episode_reward,
+            narrating=self._narrating,
+            paused=self._paused,
+            muted=self._muted,
         )
         text_surface = self._hud_font.render(text, True, (245, 245, 245))
         bar_height = band_height or self._status_bar_height()
@@ -173,6 +217,36 @@ class Display:
 
     def _subtitle_band_height(self) -> int:
         return self._subtitle_font.get_linesize() * self._subtitle_max_lines + 24
+
+    @staticmethod
+    def _build_status_text(
+        *,
+        env_id: str,
+        step: int,
+        episode_reward: float,
+        narrating: bool,
+        paused: bool,
+        muted: bool,
+    ) -> str:
+        narration_state = "narrating" if narrating else "idle"
+        run_state = "paused" if paused else "running"
+        audio_state = "muted" if muted else "audible"
+        return (
+            f"env: {env_id} | step: {step} | episode reward: {episode_reward:.2f} "
+            f"| {narration_state} | {run_state} | audio: {audio_state}"
+        )
+
+    @staticmethod
+    def _key_to_action(key: int) -> DisplayAction | None:
+        if key == pygame.K_SPACE:
+            return "toggle_pause"
+        if key == pygame.K_n:
+            return "force_narrate"
+        if key == pygame.K_m:
+            return "toggle_mute"
+        if key == pygame.K_s:
+            return "save_clip"
+        return None
 
     @staticmethod
     def _compute_window_layout(

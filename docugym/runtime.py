@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import logging
 import math
+from pathlib import Path
 from time import perf_counter
 from typing import (
     Any,
@@ -18,7 +20,7 @@ from typing import (
 
 import numpy as np
 
-from docugym.display import Display
+from docugym.display import Display, DisplayAction
 from docugym.env import (
     DEFAULT_TRUSTED_SB3_REPO_PREFIXES,
     RandomAgent,
@@ -367,6 +369,68 @@ def _env_human_name(env_id: str) -> str:
     return env_id.replace("/", " ").replace("-", " ")
 
 
+def _set_display_flag(display: Any, method_name: str, value: bool) -> None:
+    method = getattr(display, method_name, None)
+    if callable(method):
+        method(value)
+
+
+def _poll_display_actions(display: Any) -> list[DisplayAction]:
+    poll = getattr(display, "poll_actions", None)
+    if not callable(poll):
+        return []
+
+    actions = poll()
+    if not isinstance(actions, list):
+        return []
+    return actions
+
+
+def _clear_asyncio_queue(queue_obj: asyncio.Queue[Any]) -> None:
+    while True:
+        try:
+            _ = queue_obj.get_nowait()
+        except asyncio.QueueEmpty:
+            return
+
+
+def _clear_audio_buffer(audio_output: AudioOutputClient) -> None:
+    clear = getattr(audio_output, "clear", None)
+    if callable(clear):
+        clear()
+
+
+def _save_frame_png(frame: np.ndarray, path: Path) -> None:
+    try:
+        from PIL import Image
+    except ImportError as exc:  # pragma: no cover - depends on optional install
+        raise RuntimeError("Pillow is required to save clip snapshots.") from exc
+
+    frame_to_save = frame
+    if frame_to_save.dtype != np.uint8:
+        frame_to_save = np.clip(frame_to_save, 0, 255).astype(np.uint8)
+
+    Image.fromarray(frame_to_save[:, :, :3]).save(path, format="PNG")
+
+
+def _save_clip_snapshot(
+    *,
+    frame: np.ndarray,
+    step: int,
+    narration: str,
+    out_dir: Path = Path("out/clips"),
+) -> tuple[Path, Path]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
+    stem = f"clip-step-{step:06d}-{timestamp}"
+    frame_path = out_dir / f"{stem}.png"
+    narration_path = out_dir / f"{stem}.txt"
+
+    _save_frame_png(frame=frame, path=frame_path)
+    narration_path.write_text(f"{narration.strip()}\n", encoding="utf-8")
+    return frame_path, narration_path
+
+
 def _mean_abs_pixel_delta(current: np.ndarray, previous: np.ndarray) -> float:
     current_rgb = current[:, :, :3].astype(np.float32, copy=False)
     previous_rgb = previous[:, :, :3].astype(np.float32, copy=False)
@@ -507,6 +571,7 @@ async def run_stage6_session(
         min_window_width=min_window_width,
     )
     display.set_subtitle("A pause. The creature gathers itself.")
+    _set_display_flag(display, "set_narrating", False)
 
     random_agent = RandomAgent(env)
     scripted_agent = ScriptedAgent(env_id=env_id, fallback=random_agent)
@@ -570,11 +635,16 @@ async def run_stage6_session(
     narration_count = 0
     dropped_narration_candidates = 0
     rendered_steps = 0
+    paused = False
+    audio_muted = not tts_active
+    latest_narration_text = "A pause. The creature gathers itself."
     previous_narrations: deque[str] = deque(maxlen=previous_narration_window)
     recent_events: deque[str] = deque(maxlen=max_context_events)
+    _set_display_flag(display, "set_paused", paused)
+    _set_display_flag(display, "set_muted", audio_muted)
 
     async def env_task() -> None:
-        nonlocal rendered_steps, policy_disabled
+        nonlocal rendered_steps, policy_disabled, paused
 
         observation, _ = env.reset(seed=seed)
         step = 0
@@ -582,6 +652,10 @@ async def run_stage6_session(
         episode_reward = 0.0
 
         while not stop_event.is_set():
+            if paused:
+                await asyncio.sleep(0.01)
+                continue
+
             if policy is not None and not policy_disabled:
                 try:
                     action, _ = policy.predict(observation, deterministic=True)
@@ -713,7 +787,7 @@ async def run_stage6_session(
             await asyncio.sleep(0)
 
     async def narrator_task() -> None:
-        nonlocal narration_count, dropped_narration_candidates
+        nonlocal narration_count, dropped_narration_candidates, latest_narration_text
 
         while not stop_event.is_set() or not narration_q.empty():
             try:
@@ -748,10 +822,11 @@ async def run_stage6_session(
             narration_count += 1
             latency_samples_ms.append(latency_ms)
             previous_narrations.append(narration)
+            latest_narration_text = narration
 
             _ = _push_drop_oldest(subtitle_q, narration)
 
-            if tts_active and active_speaker is not None:
+            if tts_active and active_speaker is not None and not audio_muted:
                 dropped_tts = _push_drop_oldest(tts_q, narration)
                 if dropped_tts:
                     dropped_narration_candidates += 1
@@ -773,6 +848,8 @@ async def run_stage6_session(
             await asyncio.sleep(0)
 
     async def tts_task() -> None:
+        nonlocal audio_muted
+
         if not tts_active or active_speaker is None or active_audio_output is None:
             return
 
@@ -784,7 +861,14 @@ async def run_stage6_session(
 
             try:
                 async with tts_sem:
+                    if audio_muted:
+                        continue
+
+                    _set_display_flag(display, "set_narrating", True)
                     async for sentence in _speak_async(active_speaker, text):
+                        if audio_muted:
+                            break
+
                         subtitle_text = sentence.graphemes.strip()
                         if subtitle_text:
                             _ = _push_drop_oldest(subtitle_q, subtitle_text)
@@ -797,10 +881,14 @@ async def run_stage6_session(
                     "TTS synthesis failed; continuing subtitle-only: %s",
                     exc,
                 )
+            finally:
+                _set_display_flag(display, "set_narrating", False)
 
             await asyncio.sleep(0)
 
     async def display_task() -> None:
+        nonlocal paused, audio_muted, dropped_narration_candidates
+
         latest_display: _DisplayEvent | None = None
 
         while not stop_event.is_set():
@@ -820,6 +908,64 @@ async def run_stage6_session(
             if not display.blit_frame(latest_display.frame):
                 stop_event.set()
                 break
+
+            for action in _poll_display_actions(display):
+                if action == "toggle_pause":
+                    paused = not paused
+                    _set_display_flag(display, "set_paused", paused)
+                    logger.info("Playback pause toggled: paused=%s", paused)
+                    continue
+
+                if action == "toggle_mute":
+                    audio_muted = not audio_muted
+                    _set_display_flag(display, "set_muted", audio_muted)
+                    if audio_muted:
+                        _clear_asyncio_queue(tts_q)
+                        if active_audio_output is not None:
+                            _clear_audio_buffer(active_audio_output)
+                    logger.info("Playback mute toggled: muted=%s", audio_muted)
+                    continue
+
+                if action == "force_narrate":
+                    event_summary = (
+                        f"step {latest_display.step}; reward n/a; episode reward "
+                        f"{latest_display.episode_reward:+.2f}; delta n/a; "
+                        "triggers manual"
+                    )
+                    recent_events.append(event_summary)
+                    dropped = _push_drop_oldest(
+                        narration_q,
+                        _NarrationCandidate(
+                            frame=latest_display.frame,
+                            step=latest_display.step,
+                            event_summary=event_summary,
+                            timestamp=perf_counter(),
+                        ),
+                    )
+                    if dropped:
+                        dropped_narration_candidates += 1
+                        logger.info(
+                            "Dropped forced narration candidate at step=%d due backlog",
+                            latest_display.step,
+                        )
+                    continue
+
+                if action == "save_clip":
+                    frame_copy = np.array(latest_display.frame, copy=True)
+                    try:
+                        frame_path, narration_path = await asyncio.to_thread(
+                            _save_clip_snapshot,
+                            frame=frame_copy,
+                            step=latest_display.step,
+                            narration=latest_narration_text,
+                        )
+                        logger.info(
+                            "Saved clip snapshot: frame=%s narration=%s",
+                            frame_path,
+                            narration_path,
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to save clip snapshot: %s", exc)
 
             await asyncio.sleep(0)
 

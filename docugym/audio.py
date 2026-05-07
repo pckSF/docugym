@@ -114,6 +114,16 @@ class AudioOutput:
             self._stats.dropped_chunks += 1
             logger.debug("Dropped audio chunk due to sustained queue pressure")
 
+    def clear(self) -> None:
+        """Drop pending queued and buffered audio chunks immediately."""
+
+        self._pending = np.empty(0, dtype=np.float32)
+        while True:
+            try:
+                _ = self._queue.get_nowait()
+            except queue.Empty:
+                return
+
     def _callback(self, outdata: np.ndarray, frames: int, *_: object) -> None:
         outdata.fill(0.0)
 
