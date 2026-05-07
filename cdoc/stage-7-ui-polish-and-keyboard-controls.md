@@ -4,7 +4,7 @@ tags: [stage-7, display, runtime, shortcuts, subtitles, hud]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-6-async-orchestration-and-keyframe-selection.md, stage-3-display-layer.md, stage-3-display-min-width-and-subtitle-width-policy.md, 2026-04-27-voice-toggle-subtitle-only-mode.md, stage-5-local-tts-streaming-audio.md]
+related: [stage-6-async-orchestration-and-keyframe-selection.md, stage-3-display-layer.md, stage-3-display-min-width-and-subtitle-width-policy.md, 2026-04-27-voice-toggle-subtitle-only-mode.md, stage-5-local-tts-streaming-audio.md, stage-8-packaging-cli-and-readme.md]
 ---
 
 # Stage 7 UI Polish and Keyboard Controls
@@ -118,3 +118,4 @@ required behavior with lower complexity and better testability inside current ar
 
 - 2026-05-07: Created Stage 7 decision note covering keyboard controls, HUD state indicators,
   text-band subtitle policy continuity, and runtime integration tradeoffs.
+- 2026-05-07: Linked Stage 8 packaging/CLI/readme decision note.
