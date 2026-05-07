@@ -7,6 +7,7 @@ from typing import Any, Literal, Protocol
 import numpy as np
 
 from docugym.env import Policy, RandomAgent, ScriptedAgent, load_sb3_policy, make_env
+from docugym.narration_events import humanize_env_id
 from docugym.narrator import NarrationContext
 
 
@@ -25,10 +26,6 @@ class PromptTuningSample:
     reward: float
     narration: str
     latency_ms: float
-
-
-def _humanize_env_id(env_id: str) -> str:
-    return env_id.replace("/", " ").replace("-", " ")
 
 
 def _choose_action(
@@ -60,6 +57,8 @@ def run_prompt_tuning(
     sb3_filename: str | None,
     trusted_repo_prefixes: list[str] | tuple[str, ...] | None,
     enforce_trusted_repo: bool,
+    sb3_algorithm: str | None = None,
+    sb3_device: str = "cpu",
     env_kwargs: dict[str, Any] | None = None,
 ) -> list[PromptTuningSample]:
     """Collect frame samples and generate narration text for prompt A/B tuning."""
@@ -86,6 +85,8 @@ def run_prompt_tuning(
             filename=sb3_filename,
             trusted_repo_prefixes=trusted_repo_prefixes,
             enforce_trusted_repo=enforce_trusted_repo,
+            algorithm=sb3_algorithm,
+            device=sb3_device,
         )
 
     rendered_step = 0
@@ -119,7 +120,7 @@ def run_prompt_tuning(
                 )
 
             context = NarrationContext(
-                env_human_name=_humanize_env_id(env_id),
+                env_human_name=humanize_env_id(env_id),
                 previous_narration=previous_narration,
                 event_summary=(
                     f"episode step {rendered_step}; reward {float(reward):+.2f}"

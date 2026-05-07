@@ -9,6 +9,8 @@ from typing import Any, AsyncIterator
 import numpy as np
 
 _SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[.!?])\s+")
+_ABBREVIATION_DOT = "<dot>"
+_SENTENCE_ABBREVIATIONS: tuple[str, ...] = ("Mr.", "Mrs.", "Ms.", "Dr.")
 
 
 @dataclass(slots=True)
@@ -115,8 +117,14 @@ class KokoroTTS:
         if not normalized:
             return []
 
+        for abbreviation in _SENTENCE_ABBREVIATIONS:
+            normalized = normalized.replace(
+                abbreviation,
+                abbreviation.replace(".", _ABBREVIATION_DOT),
+            )
+
         return [
-            sentence.strip()
+            sentence.replace(_ABBREVIATION_DOT, ".").strip()
             for sentence in _SENTENCE_BOUNDARY_RE.split(normalized)
             if sentence.strip()
         ]

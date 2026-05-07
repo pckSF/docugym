@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from itertools import count
 from pathlib import Path
 
 import numpy as np
+
+_CLIP_COUNTER = count()
 
 
 def _save_frame_png(frame: np.ndarray, path: Path) -> None:
@@ -30,7 +33,7 @@ def save_clip_snapshot(
 
     out_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
-    stem = f"clip-step-{step:06d}-{timestamp}"
+    stem = f"clip-step-{step:06d}-{timestamp}-{next(_CLIP_COUNTER):04d}"
     frame_path = out_dir / f"{stem}.png"
     narration_path = out_dir / f"{stem}.txt"
 

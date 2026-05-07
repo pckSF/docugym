@@ -4,6 +4,7 @@ import asyncio
 import base64
 from dataclasses import dataclass
 from io import BytesIO
+from textwrap import dedent
 from typing import Any
 
 from PIL import Image
@@ -12,21 +13,25 @@ import numpy as np
 
 from docugym.narration_defaults import DEFAULT_NARRATION_TEXT
 
-SYSTEM_PROMPT = """You are a calm, wonder-filled nature-documentary narrator in the
-tradition of BBC
-wildlife programmes. You are watching a game on screen and narrating it as if it
-were a rare scene from the natural world. Observe the creature (or vessel, vehicle,
-or figure) on screen with the same reverence you would give a pangolin or a lyrebird.
+SYSTEM_PROMPT = dedent(
+    """
+        You are a calm, wonder-filled nature-documentary narrator in the tradition of
+        BBC wildlife programmes. You are watching a game on screen and narrating it as
+        if it were a rare scene from the natural world. Observe the creature (or vessel,
+        vehicle, or figure) on screen with the same reverence you would give a pangolin
+        or a lyrebird.
 
-Rules:
-- 1 to 2 sentences, present tense, British phrasing.
-- Hushed, measured, slightly awed. Short clauses. No exclamation marks.
-- Use biology / ecology metaphors where natural: instinct, territory, courtship,
-  peril, lineage, survival, the edge of exhaustion.
-- Do not name the game. Do not mention pixels, screens, scores, or controllers.
-- Do not name real people. You are a narrator, not the narrator.
-- If nothing has changed, say so gently (e.g., \"A pause. The creature gathers
-  itself.\")."""
+        Rules:
+        - 1 to 2 sentences, present tense, British phrasing.
+        - Hushed, measured, slightly awed. Short clauses. No exclamation marks.
+        - Use biology / ecology metaphors where natural: instinct, territory,
+            courtship, peril, lineage, survival, the edge of exhaustion.
+        - Do not name the game. Do not mention pixels, screens, scores, or controllers.
+        - Do not name real people. You are a narrator, not the narrator.
+        - If nothing has changed, say so gently (e.g., "A pause. The creature gathers
+            itself.").
+        """
+).strip()
 
 
 @dataclass(slots=True)
@@ -51,7 +56,12 @@ class VLMNarrator:
         top_p: float,
         image_detail: str = "low",
         timeout_seconds: float = 30.0,
+        readiness_timeout_seconds: float = 5.0,
     ) -> None:
+        parsed_base_url = httpx.URL(base_url)
+        if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.host:
+            raise ValueError("base_url must be an absolute http(s) URL")
+
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._max_tokens = max_tokens
@@ -59,11 +69,14 @@ class VLMNarrator:
         self._top_p = top_p
         self._image_detail = image_detail
         self._timeout_seconds = timeout_seconds
+        self._readiness_timeout_seconds = readiness_timeout_seconds
+        self._client: httpx.AsyncClient | None = None
+        self._client_loop: asyncio.AbstractEventLoop | None = None
 
     async def narrate_frame(self, frame: np.ndarray, context: NarrationContext) -> str:
         """Generate one short narration from an RGB frame and context."""
 
-        image_payload = self._encode_image_payload(frame)
+        image_payload = await asyncio.to_thread(self._encode_image_payload, frame)
         payload = {
             "model": self._model,
             "messages": [
@@ -84,13 +97,8 @@ class VLMNarrator:
             "top_p": self._top_p,
         }
 
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            response = await client.post(
-                f"{self._base_url}/chat/completions",
-                json=payload,
-            )
-            response.raise_for_status()
-            body = response.json()
+        client = await self._get_client()
+        body = await self._post_chat_completion(client, payload)
 
         content = body["choices"][0]["message"]["content"]
         normalized = self._normalize_message_content(content)
@@ -99,10 +107,37 @@ class VLMNarrator:
     def narrate_frame_sync(self, frame: np.ndarray, context: NarrationContext) -> str:
         """Synchronous wrapper for callers that are not running an event loop."""
 
+        async def _run_once() -> str:
+            image_payload = await asyncio.to_thread(self._encode_image_payload, frame)
+            payload = {
+                "model": self._model,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": self._build_user_message(context),
+                            },
+                            image_payload,
+                        ],
+                    },
+                ],
+                "max_tokens": self._max_tokens,
+                "temperature": self._temperature,
+                "top_p": self._top_p,
+            }
+            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                body = await self._post_chat_completion(client, payload)
+            content = body["choices"][0]["message"]["content"]
+            normalized = self._normalize_message_content(content)
+            return normalized or DEFAULT_NARRATION_TEXT
+
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(self.narrate_frame(frame=frame, context=context))
+            return asyncio.run(_run_once())
 
         raise RuntimeError(
             "narrate_frame_sync cannot be used from a running event loop; "
@@ -122,18 +157,26 @@ class VLMNarrator:
 
         deadline = asyncio.get_running_loop().time() + timeout_seconds
 
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+        async with httpx.AsyncClient(timeout=self._readiness_timeout_seconds) as client:
             while asyncio.get_running_loop().time() < deadline:
                 try:
                     response = await client.get(f"{self._base_url}/models")
                     if response.status_code == 200:
                         return True
-                except httpx.HTTPError:
+                except httpx.RequestError:
                     pass
 
                 await asyncio.sleep(poll_interval_seconds)
 
         return False
+
+    async def aclose(self) -> None:
+        """Close the persistent async HTTP client, if one was opened."""
+
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+            self._client_loop = None
 
     def wait_until_ready_sync(
         self,
@@ -183,6 +226,35 @@ class VLMNarrator:
 
         return ""
 
+    async def _get_client(self) -> httpx.AsyncClient:
+        current_loop = asyncio.get_running_loop()
+        if self._client is not None and self._client_loop is current_loop:
+            is_closed = getattr(self._client, "is_closed", False)
+            if not is_closed:
+                return self._client
+
+        if self._client is not None:
+            await self._client.aclose()
+
+        self._client = httpx.AsyncClient(timeout=self._timeout_seconds)
+        self._client_loop = current_loop
+        return self._client
+
+    async def _post_chat_completion(
+        self,
+        client: httpx.AsyncClient,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        response = await client.post(
+            f"{self._base_url}/chat/completions",
+            json=payload,
+        )
+        response.raise_for_status()
+        body = response.json()
+        if not isinstance(body, dict):
+            raise ValueError("VLM chat completion response must be a JSON object")
+        return body
+
     def _encode_image_payload(self, frame: np.ndarray) -> dict[str, Any]:
         if frame.ndim != 3 or frame.shape[2] not in {3, 4}:
             raise ValueError(
@@ -198,13 +270,19 @@ class VLMNarrator:
             image = self._downscale_long_edge(image, max_long_edge=384)
 
         buffer = BytesIO()
-        image.save(buffer, format="PNG")
+        image_format = "JPEG" if self._image_detail == "low" else "PNG"
+        if image_format == "JPEG":
+            image.save(buffer, format=image_format, quality=85, optimize=True)
+            media_type = "image/jpeg"
+        else:
+            image.save(buffer, format=image_format)
+            media_type = "image/png"
         encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
 
         return {
             "type": "image_url",
             "image_url": {
-                "url": f"data:image/png;base64,{encoded}",
+                "url": f"data:{media_type};base64,{encoded}",
                 "detail": self._image_detail,
             },
         }

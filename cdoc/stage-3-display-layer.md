@@ -4,7 +4,7 @@ tags: [stage-3, display, pygame, ui]
 created: 2026-04-20
 updated: 2026-04-24
 status: active
-related: [stage-2-gym-env-wrapper-and-smoketest.md, 2026-04-24-stage-3-real-ubuntu-display-results.md, 2026-04-24-stage-3-display-follow-up-validation-and-text-bands.md, stage-3-display-min-width-and-subtitle-width-policy.md, networking-ports-and-services.md, stage-7-ui-polish-and-keyboard-controls.md]
+related: [stage-2-gym-env-wrapper-and-smoketest.md, 2026-04-24-stage-3-real-ubuntu-display-results.md, 2026-04-24-stage-3-display-follow-up-validation-and-text-bands.md, stage-3-display-min-width-and-subtitle-width-policy.md, networking-ports-and-services.md, stage-7-ui-polish-and-keyboard-controls.md, 2026-05-07-code-review-idiomatic-and-performance-issues.md]
 ---
 
 # Stage 3 Display Layer

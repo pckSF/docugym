@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 import shutil
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, Sequence
 
 import gymnasium as gym
 import numpy as np
@@ -113,8 +113,14 @@ def _download_policy(repo_id: str, filename: str, destination: Path) -> Path:
     return destination
 
 
-def _load_policy_from_path(filename: str, model_path: Path) -> Policy:
-    algo_name = filename.split("-", maxsplit=1)[0].lower()
+def _load_policy_from_path(
+    filename: str,
+    model_path: Path,
+    *,
+    algorithm: str | None = None,
+    device: str = "cpu",
+) -> Policy:
+    algo_name = (algorithm or filename.split("-", maxsplit=1)[0]).lower()
 
     try:
         from stable_baselines3 import A2C, DQN, PPO, SAC, TD3
@@ -140,11 +146,11 @@ def _load_policy_from_path(filename: str, model_path: Path) -> Policy:
             f"Supported prefixes: {supported}."
         )
 
-    return loader.load(str(model_path), device="cpu")
+    return loader.load(str(model_path), device=device)
 
 
 def _normalize_repo_prefixes(
-    trusted_repo_prefixes: list[str] | tuple[str, ...] | None,
+    trusted_repo_prefixes: Sequence[str] | None,
 ) -> tuple[str, ...]:
     if trusted_repo_prefixes is None:
         return DEFAULT_TRUSTED_SB3_REPO_PREFIXES
@@ -163,8 +169,10 @@ def load_sb3_policy(
     repo_id: str,
     filename: str,
     *,
-    trusted_repo_prefixes: list[str] | tuple[str, ...] | None = None,
+    trusted_repo_prefixes: Sequence[str] | None = None,
     enforce_trusted_repo: bool = False,
+    algorithm: str | None = None,
+    device: str = "cpu",
 ) -> Policy:
     """Download and load an SB3 policy, with optional trust enforcement.
 
@@ -188,7 +196,12 @@ def load_sb3_policy(
         filename=filename,
         destination=cache_path,
     )
-    return _load_policy_from_path(filename=filename, model_path=model_path)
+    return _load_policy_from_path(
+        filename=filename,
+        model_path=model_path,
+        algorithm=algorithm,
+        device=device,
+    )
 
 
 def _save_frame_png(frame: np.ndarray, path: Path) -> None:
@@ -213,8 +226,10 @@ def run_smoketest(
     agent_kind: Literal["random", "scripted", "sb3"] = "random",
     sb3_repo_id: str | None = None,
     sb3_filename: str | None = None,
-    trusted_repo_prefixes: list[str] | tuple[str, ...] | None = None,
+    trusted_repo_prefixes: Sequence[str] | None = None,
     enforce_trusted_repo: bool = False,
+    sb3_algorithm: str | None = None,
+    sb3_device: str = "cpu",
 ) -> list[Path]:
     """Step an environment and persist rendered frames for smoke validation."""
 
@@ -237,6 +252,8 @@ def run_smoketest(
             filename=sb3_filename,
             trusted_repo_prefixes=trusted_repo_prefixes,
             enforce_trusted_repo=enforce_trusted_repo,
+            algorithm=sb3_algorithm,
+            device=sb3_device,
         )
 
     frame_paths: list[Path] = []

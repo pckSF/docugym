@@ -59,10 +59,12 @@ class DummyEnv:
 
 class DummyAlgo:
     load_calls: list[str] = []
+    load_kwargs: list[dict[str, object]] = []
 
     @classmethod
-    def load(cls, path: str, **_kwargs: object) -> dict[str, str]:
+    def load(cls, path: str, **kwargs: object) -> dict[str, str]:
         cls.load_calls.append(path)
+        cls.load_kwargs.append(dict(kwargs))
         return {"loaded_from": path}
 
 
@@ -171,6 +173,7 @@ def test_load_sb3_policy_downloads_to_docugym_cache(
     monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
     monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
     DummyAlgo.load_calls = []
+    DummyAlgo.load_kwargs = []
 
     first = cast("dict[str, str]", load_sb3_policy(repo_id=repo_id, filename=filename))
     second = cast("dict[str, str]", load_sb3_policy(repo_id=repo_id, filename=filename))
@@ -182,6 +185,48 @@ def test_load_sb3_policy_downloads_to_docugym_cache(
     assert hf_calls == [(repo_id, filename)]
     assert cache_path.exists()
     assert DummyAlgo.load_calls == [str(cache_path), str(cache_path)]
+    assert DummyAlgo.load_kwargs == [{"device": "cpu"}, {"device": "cpu"}]
+
+
+def test_load_sb3_policy_accepts_explicit_algorithm_and_device(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_id = "sb3/custom-name"
+    filename = "custom-model.zip"
+
+    downloaded = tmp_path / "downloaded.zip"
+    downloaded.write_text("model", encoding="utf-8")
+
+    hf_module = types.ModuleType("huggingface_sb3")
+    setattr(
+        hf_module,
+        "load_from_hub",
+        lambda *, repo_id, filename: str(downloaded),
+    )
+
+    sb3_module = types.ModuleType("stable_baselines3")
+    setattr(sb3_module, "A2C", DummyAlgo)
+    setattr(sb3_module, "DQN", DummyAlgo)
+    setattr(sb3_module, "PPO", DummyAlgo)
+    setattr(sb3_module, "SAC", DummyAlgo)
+    setattr(sb3_module, "TD3", DummyAlgo)
+
+    monkeypatch.setitem(sys.modules, "huggingface_sb3", hf_module)
+    monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
+    monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
+    DummyAlgo.load_calls = []
+    DummyAlgo.load_kwargs = []
+
+    _ = load_sb3_policy(
+        repo_id=repo_id,
+        filename=filename,
+        algorithm="ppo",
+        device="cuda",
+    )
+
+    assert DummyAlgo.load_calls
+    assert DummyAlgo.load_kwargs == [{"device": "cuda"}]
 
 
 def test_run_smoketest_saves_requested_number_of_frames(

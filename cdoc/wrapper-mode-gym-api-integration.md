@@ -4,7 +4,7 @@ tags: [wrapper, gymnasium, runtime, narration, subtitles]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-6-async-orchestration-and-keyframe-selection.md, stage-7-ui-polish-and-keyboard-controls.md, stage-8-packaging-cli-and-readme.md, final-setup-runtime-and-naming-consolidation.md]
+related: [stage-6-async-orchestration-and-keyframe-selection.md, stage-7-ui-polish-and-keyboard-controls.md, stage-8-packaging-cli-and-readme.md, final-setup-runtime-and-naming-consolidation.md, 2026-05-07-code-review-idiomatic-and-performance-issues.md]
 ---
 
 # Wrapper Mode Gym API Integration

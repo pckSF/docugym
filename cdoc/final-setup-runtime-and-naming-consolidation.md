@@ -4,7 +4,7 @@ tags: [runtime, cli, refactor, naming, final-setup]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-6-async-orchestration-and-keyframe-selection.md, stage-8-packaging-cli-and-readme.md, stage-10-tuning-and-eval.md]
+related: [stage-6-async-orchestration-and-keyframe-selection.md, stage-8-packaging-cli-and-readme.md, stage-10-tuning-and-eval.md, 2026-05-07-code-review-idiomatic-and-performance-issues.md]
 ---
 
 # Final Setup Runtime and Naming Consolidation

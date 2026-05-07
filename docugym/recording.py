@@ -5,11 +5,15 @@ from pathlib import Path
 import shutil
 import subprocess
 from tempfile import TemporaryDirectory
+import threading
 from time import perf_counter
+from typing import Any, cast
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+_SILENCE_BLOCK = np.zeros(4096, dtype=np.float32)
 
 
 class FFmpegSessionRecorder:
@@ -51,6 +55,8 @@ class FFmpegSessionRecorder:
         self._audio_file = self._audio_path.open("wb")
 
         self._video_process: subprocess.Popen[bytes] | None = None
+        self._video_stderr_chunks: list[bytes] = []
+        self._video_stderr_thread: threading.Thread | None = None
         self._frame_shape: tuple[int, int] | None = None
         self._frame_count = 0
         self._audio_samples_written = 0
@@ -79,7 +85,7 @@ class FFmpegSessionRecorder:
             raise RuntimeError("Video encoder process is not available")
 
         try:
-            self._video_process.stdin.write(frame_rgb.tobytes())
+            self._video_process.stdin.write(memoryview(cast("Any", frame_rgb)))
         except BrokenPipeError as exc:
             raise RuntimeError(
                 "ffmpeg video encoder closed unexpectedly while recording"
@@ -170,6 +176,12 @@ class FFmpegSessionRecorder:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
+        self._video_stderr_thread = threading.Thread(
+            target=self._drain_video_stderr,
+            name="docugym-ffmpeg-stderr",
+            daemon=True,
+        )
+        self._video_stderr_thread.start()
 
     def _finalize_video_encoder(self) -> None:
         process = self._video_process
@@ -179,9 +191,23 @@ class FFmpegSessionRecorder:
             raise RuntimeError("Video encoder stdin unavailable")
 
         process.stdin.close()
-        _, stderr = process.communicate()
-        if process.returncode != 0:
+        return_code = process.wait()
+        if self._video_stderr_thread is not None:
+            self._video_stderr_thread.join(timeout=1.0)
+        stderr = b"".join(self._video_stderr_chunks)
+        if return_code != 0:
             raise RuntimeError(self._format_ffmpeg_error("video encoding", stderr))
+
+    def _drain_video_stderr(self) -> None:
+        process = self._video_process
+        if process is None or process.stderr is None:
+            return
+
+        while True:
+            chunk = process.stderr.read(4096)
+            if not chunk:
+                return
+            self._video_stderr_chunks.append(chunk)
 
     def _mux_audio_video(self) -> None:
         self._out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -225,11 +251,10 @@ class FFmpegSessionRecorder:
         if sample_count <= 0:
             return
 
-        zero_block = np.zeros(4096, dtype=np.float32)
         remaining = sample_count
         while remaining > 0:
-            take = min(remaining, zero_block.size)
-            self._audio_file.write(zero_block[:take].tobytes())
+            take = min(remaining, _SILENCE_BLOCK.size)
+            self._audio_file.write(memoryview(cast("Any", _SILENCE_BLOCK[:take])))
             remaining -= take
 
         self._audio_samples_written += sample_count

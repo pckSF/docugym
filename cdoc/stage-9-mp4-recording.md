@@ -4,7 +4,7 @@ tags: [stage-9, recording, ffmpeg, runtime, cli]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-8-packaging-cli-and-readme.md]
+related: [stage-8-packaging-cli-and-readme.md, 2026-05-07-code-review-idiomatic-and-performance-issues.md]
 ---
 
 # Stage 9 Optional MP4 Recording

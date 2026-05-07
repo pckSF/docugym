@@ -4,7 +4,7 @@ tags: [stage-4, narration, vlm, vllm, httpx, sync]
 created: 2026-04-24
 updated: 2026-04-24
 status: active
-related: [stage-3-display-layer.md, networking-ports-and-services.md, 2026-04-24-litellm-supply-chain-exposure-review.md, stage-5-local-tts-streaming-audio.md, stage-6-async-orchestration-and-keyframe-selection.md]
+related: [stage-3-display-layer.md, networking-ports-and-services.md, 2026-04-24-litellm-supply-chain-exposure-review.md, stage-5-local-tts-streaming-audio.md, stage-6-async-orchestration-and-keyframe-selection.md, 2026-05-07-code-review-idiomatic-and-performance-issues.md]
 ---
 
 # Stage 4 VLM Narration (Synchronous First)

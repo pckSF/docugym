@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 from dataclasses import dataclass
+from functools import partial
 import logging
 import queue
 import threading
@@ -16,15 +18,15 @@ from docugym.clips import save_clip_snapshot
 from docugym.display import Display
 from docugym.display_actions import build_action_transitions, poll_display_actions
 from docugym.keyframes import KeyframeSelector
+from docugym.narration_defaults import (
+    DEFAULT_NARRATION_TEXT,
+    validate_narration_config,
+)
 from docugym.narration_events import (
     format_event_summary,
     humanize_env_id,
     join_previous_narrations,
     join_recent_events,
-)
-from docugym.narration_defaults import (
-    DEFAULT_NARRATION_TEXT,
-    validate_narration_config,
 )
 from docugym.narrator import NarrationContext, VLMNarrator
 from docugym.queue_utils import drain_latest_sync, push_drop_oldest_sync
@@ -178,7 +180,7 @@ class DocuWrapper(gym.Wrapper):
         self._recent_events: deque[str] = deque(maxlen=max_context_events)
         self._previous_narrations: deque[str] = deque(maxlen=previous_narration_window)
 
-        self._subtitle_queue: queue.Queue[str] = queue.Queue(maxsize=8)
+        self._subtitle_queue: queue.Queue[str] = queue.Queue(maxsize=1)
         self._narration_queue: queue.Queue[_NarrationRequest] = queue.Queue(maxsize=2)
 
         self._stop_event = threading.Event()
@@ -328,77 +330,121 @@ class DocuWrapper(gym.Wrapper):
         self._worker_thread.start()
 
     def _worker_main(self) -> None:
-        while not self._stop_event.is_set():
-            try:
-                request = self._narration_queue.get(timeout=0.1)
-            except queue.Empty:
-                continue
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
-            context = NarrationContext(
-                env_human_name=humanize_env_id(self._env_id),
-                previous_narration=request.previous_narration,
-                event_summary=request.context_summary,
-            )
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    request = self._narration_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
 
-            started = perf_counter()
-            try:
-                narration = self._narrator.narrate_frame_sync(
-                    frame=request.frame,
-                    context=context,
+                context = NarrationContext(
+                    env_human_name=humanize_env_id(self._env_id),
+                    previous_narration=request.previous_narration,
+                    event_summary=request.context_summary,
                 )
-            except Exception as exc:
-                logger.warning(
-                    "Narration request failed at step=%d: %s",
-                    request.step,
-                    exc,
-                )
-                narration = DEFAULT_NARRATION_TEXT
 
-            latency_ms = (perf_counter() - started) * 1000.0
-            self._record_narration_result(narration=narration, latency_ms=latency_ms)
-
-            if self._on_narration is not None:
-                self._safe_callback(
-                    callback=lambda: self._on_narration(
-                        narration,
+                started = perf_counter()
+                try:
+                    narration = loop.run_until_complete(
+                        self._narrate_request(request=request, context=context)
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Narration request failed at step=%d: %s",
                         request.step,
-                        latency_ms,
-                    ),
-                    name="on_narration",
+                        exc,
+                        exc_info=True,
+                    )
+                    narration = DEFAULT_NARRATION_TEXT
+
+                latency_ms = (perf_counter() - started) * 1000.0
+                self._record_narration_result(
+                    narration=narration, latency_ms=latency_ms
                 )
 
-            if (
-                not self._voice_enabled
-                or self._speaker is None
-                or self._audio_output is None
-            ):
-                continue
+                if self._on_narration is not None:
+                    self._safe_callback(
+                        callback=partial(
+                            self._on_narration,
+                            narration,
+                            request.step,
+                            latency_ms,
+                        ),
+                        name="on_narration",
+                    )
 
-            if self._audio_muted:
-                continue
+                if (
+                    not self._voice_enabled
+                    or self._speaker is None
+                    or self._audio_output is None
+                ):
+                    continue
 
-            self._set_narrating(True)
-            try:
-                sentences = self._speaker.speak_sync(narration)
-                for sentence in sentences:
-                    if self._audio_muted:
-                        break
-                    self._emit_sentence(sentence)
-            except Exception as exc:
-                logger.warning("TTS synthesis failed in wrapper mode: %s", exc)
-            finally:
-                self._set_narrating(False)
+                if self._audio_muted:
+                    continue
+
+                self._set_narrating(True)
+                try:
+                    sentences = self._speaker.speak_sync(narration)
+                    for sentence in sentences:
+                        if self._audio_muted:
+                            break
+                        self._emit_sentence(sentence)
+                except Exception as exc:
+                    logger.warning(
+                        "TTS synthesis failed in wrapper mode: %s",
+                        exc,
+                        exc_info=True,
+                    )
+                finally:
+                    self._set_narrating(False)
+        finally:
+            close = getattr(self._narrator, "aclose", None)
+            if callable(close):
+                loop.run_until_complete(close())
+            loop.close()
+
+    async def _narrate_request(
+        self,
+        *,
+        request: _NarrationRequest,
+        context: NarrationContext,
+    ) -> str:
+        narrate_frame = getattr(self._narrator, "narrate_frame", None)
+        if callable(narrate_frame):
+            return await narrate_frame(frame=request.frame, context=context)
+
+        return self._narrator.narrate_frame_sync(
+            frame=request.frame,
+            context=context,
+        )
 
     def _record_narration_result(self, *, narration: str, latency_ms: float) -> None:
+        dropped = push_drop_oldest_sync(self._subtitle_queue, narration)
+        if dropped:
+            logger.info("Dropped stale subtitle update due queue pressure")
+
         with self._stats_lock:
             self._stats.narration_count += 1
             self._stats.last_latency_ms = latency_ms
             self._previous_narrations.append(narration)
             self._latest_narration = narration
+            self._latest_subtitle = narration
 
-        self._push_subtitle(narration)
+        if self._on_subtitle is not None:
+            self._safe_callback(
+                callback=partial(self._on_subtitle, narration),
+                name="on_subtitle",
+            )
 
     def _emit_sentence(self, sentence: SpeechSentence) -> None:
+        audio_output = self._audio_output
+        if audio_output is None:
+            return
+
         subtitle_text = sentence.graphemes.strip()
         if subtitle_text:
             self._push_subtitle(subtitle_text)
@@ -406,10 +452,10 @@ class DocuWrapper(gym.Wrapper):
         for chunk in sentence.chunks:
             if self._audio_muted:
                 break
-            self._audio_output.enqueue(chunk)
+            audio_output.enqueue(chunk)
             if self._on_audio_chunk is not None:
                 self._safe_callback(
-                    callback=lambda: self._on_audio_chunk(chunk),
+                    callback=partial(self._on_audio_chunk, chunk),
                     name="on_audio_chunk",
                 )
 
@@ -429,7 +475,7 @@ class DocuWrapper(gym.Wrapper):
 
         if self._on_subtitle is not None:
             self._safe_callback(
-                callback=lambda: self._on_subtitle(text),
+                callback=partial(self._on_subtitle, text),
                 name="on_subtitle",
             )
 
@@ -451,7 +497,7 @@ class DocuWrapper(gym.Wrapper):
         if self._on_status is not None:
             state = self.state()
             self._safe_callback(
-                callback=lambda: self._on_status(state),
+                callback=partial(self._on_status, state),
                 name="on_status",
             )
 

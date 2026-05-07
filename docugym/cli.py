@@ -235,6 +235,8 @@ def smoketest(
         sb3_filename=effective_filename,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
         enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        sb3_algorithm=config.agent.sb3_algorithm,
+        sb3_device=config.agent.device,
     )
 
     logger.info(
@@ -556,6 +558,8 @@ def run(
         agent_kind=effective_agent,
         sb3_repo_id=effective_repo_id,
         sb3_filename=effective_filename,
+        sb3_algorithm=config.agent.sb3_algorithm,
+        sb3_device=config.agent.device,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
         enforce_trusted_repo=config.agent.enforce_trusted_repo,
         voice_enabled=effective_voice,
@@ -701,6 +705,8 @@ def tune_prompt(
         agent_kind=effective_agent,
         sb3_repo_id=effective_repo_id,
         sb3_filename=effective_filename,
+        sb3_algorithm=config.agent.sb3_algorithm,
+        sb3_device=config.agent.device,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
         enforce_trusted_repo=config.agent.enforce_trusted_repo,
         env_kwargs=effective_env_kwargs,
@@ -722,5 +728,6 @@ def tune_prompt(
         )
         typer.echo(sample.narration)
 
-    mean_latency_ms = sum(sample.latency_ms for sample in results) / len(results)
-    typer.echo(f"Mean narration latency: {mean_latency_ms:.1f}ms")
+    if results:
+        mean_latency_ms = sum(sample.latency_ms for sample in results) / len(results)
+        typer.echo(f"Mean narration latency: {mean_latency_ms:.1f}ms")

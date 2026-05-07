@@ -4,7 +4,7 @@ tags: [stage-5, tts, audio, kokoro, subtitles, security]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-4-vlm-narration-sync.md, 2026-04-27-voice-toggle-subtitle-only-mode.md, stage-6-async-orchestration-and-keyframe-selection.md, stage-7-ui-polish-and-keyboard-controls.md, security-audit-and-risk-register.md]
+related: [stage-4-vlm-narration-sync.md, 2026-04-27-voice-toggle-subtitle-only-mode.md, stage-6-async-orchestration-and-keyframe-selection.md, stage-7-ui-polish-and-keyboard-controls.md, security-audit-and-risk-register.md, 2026-05-07-code-review-idiomatic-and-performance-issues.md]
 ---
 
 # Stage 5 Local TTS and Voice Toggle

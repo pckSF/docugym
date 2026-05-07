@@ -124,6 +124,20 @@ class FakeSpeaker:
         )
 
 
+class DistinctSubtitleSpeaker:
+    def speak_sync(self, text: str) -> list[SpeechSentence]:
+        del text
+        return cast(
+            "list[SpeechSentence]",
+            [
+                FakeSpeakerSentence(
+                    graphemes="A sentence subtitle arrives.",
+                    chunks=[np.ones(16, dtype=np.float32)],
+                )
+            ],
+        )
+
+
 class FakeAudioOutput:
     def __init__(self) -> None:
         self.started = False
@@ -444,6 +458,103 @@ def test_run_session_records_frames_and_audio(monkeypatch) -> None:
     assert recorder.audio_chunks
     assert recorder.closed is True
     assert recorder.closed_at is not None
+
+
+def test_run_session_voice_mode_lets_tts_own_subtitles(monkeypatch) -> None:
+    env = DummyEnv()
+    displays: list[FakeDisplay] = []
+
+    def fake_make_env(**_kwargs: Any) -> DummyEnv:
+        return env
+
+    def fake_display(**kwargs: Any) -> FakeDisplay:
+        display = FakeDisplay(**kwargs)
+        displays.append(display)
+        return display
+
+    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
+    monkeypatch.setattr("docugym.runtime.Display", fake_display)
+
+    narrator = AsyncFakeNarrator()
+    audio_output = FakeAudioOutput()
+
+    result = run_session_sync(
+        env_id="ALE/Pong-v5",
+        seed=5,
+        fps=60,
+        window_scale=3,
+        subtitle_font="DejaVu Sans",
+        subtitle_size=22,
+        subtitle_max_text_width=960,
+        hud=True,
+        text_bands=True,
+        min_window_width=960,
+        env_kwargs={},
+        narrator=narrator,
+        narration_interval_seconds=999.0,
+        min_gap_seconds=0.0,
+        reward_spike_threshold=0.5,
+        pixel_delta_threshold=999.0,
+        max_context_events=3,
+        previous_narration_window=2,
+        agent_kind="random",
+        sb3_repo_id=None,
+        sb3_filename=None,
+        voice_enabled=True,
+        speaker=DistinctSubtitleSpeaker(),
+        audio_output=audio_output,
+        max_steps=6,
+    )
+
+    assert result.narration_count >= 1
+    assert "A sentence subtitle arrives." in displays[0].subtitles
+    assert "The patient traveller drifts onward." not in displays[0].subtitles
+
+
+def test_run_session_ignores_narration_callback_failure(monkeypatch) -> None:
+    env = DummyEnv()
+
+    def fake_make_env(**_kwargs: Any) -> DummyEnv:
+        return env
+
+    def fake_display(**kwargs: Any) -> FakeDisplay:
+        return FakeDisplay(**kwargs)
+
+    def failing_callback(_text: str, _step: int, _latency_ms: float) -> None:
+        raise RuntimeError("callback failed")
+
+    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
+    monkeypatch.setattr("docugym.runtime.Display", fake_display)
+
+    result = run_session_sync(
+        env_id="ALE/Pong-v5",
+        seed=5,
+        fps=60,
+        window_scale=3,
+        subtitle_font="DejaVu Sans",
+        subtitle_size=22,
+        subtitle_max_text_width=960,
+        hud=True,
+        text_bands=True,
+        min_window_width=960,
+        env_kwargs={},
+        narrator=AsyncFakeNarrator(),
+        narration_interval_seconds=999.0,
+        min_gap_seconds=0.0,
+        reward_spike_threshold=0.5,
+        pixel_delta_threshold=999.0,
+        max_context_events=3,
+        previous_narration_window=2,
+        agent_kind="random",
+        sb3_repo_id=None,
+        sb3_filename=None,
+        voice_enabled=False,
+        max_steps=6,
+        on_narration=failing_callback,
+    )
+
+    assert result.narration_count >= 1
+    assert env.closed is True
 
 
 def test_run_session_builds_ffmpeg_recorder_from_output_path(

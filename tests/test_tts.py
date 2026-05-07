@@ -62,3 +62,25 @@ def test_kokoro_tts_speak_sync_handles_blank_text(monkeypatch) -> None:
     tts = KokoroTTS(voice="bm_george", speed=1.0)
 
     assert tts.speak_sync("   ") == []
+
+
+def test_kokoro_tts_does_not_split_common_titles(monkeypatch) -> None:
+    created: dict[str, FakePipeline] = {}
+
+    def fake_factory(*, lang_code: str) -> FakePipeline:
+        pipeline = FakePipeline(lang_code=lang_code)
+        created["pipeline"] = pipeline
+        return pipeline
+
+    kokoro_module = types.ModuleType("kokoro")
+    setattr(kokoro_module, "KPipeline", fake_factory)
+    monkeypatch.setitem(sys.modules, "kokoro", kokoro_module)
+
+    tts = KokoroTTS(voice="bm_george", speed=1.0)
+
+    sentences = tts.speak_sync("Mr. Pangolin runs. Dr. Finch waits.")
+
+    assert [sentence.graphemes for sentence in sentences] == [
+        "Mr. Pangolin runs.",
+        "Dr. Finch waits.",
+    ]

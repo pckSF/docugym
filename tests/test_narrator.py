@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 from io import BytesIO
 from typing import Any, Self, cast
@@ -30,12 +31,17 @@ class _FakeAsyncClient:
         self._capture = capture
         self._status_codes = status_codes or [200]
         self._get_calls = 0
+        self.is_closed = False
 
     async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:  # type: ignore[no-untyped-def]
         del exc_type, exc, tb
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        self.is_closed = True
 
     async def post(self, url: str, json: dict[str, object]) -> _FakeResponse:
         self._capture["post_url"] = url
@@ -103,11 +109,45 @@ def test_narrate_frame_sync_posts_multimodal_payload(monkeypatch) -> None:
 
     data_url = image_message["image_url"]["url"]
     assert isinstance(data_url, str)
-    assert data_url.startswith("data:image/png;base64,")
+    assert data_url.startswith("data:image/jpeg;base64,")
 
     raw_bytes = base64.b64decode(data_url.split(",", maxsplit=1)[1])
     image = Image.open(BytesIO(raw_bytes))
     assert max(image.size) <= 384
+
+
+def test_narrate_frame_reuses_async_client_until_closed(monkeypatch) -> None:
+    capture: dict[str, Any] = {"clients": []}
+
+    def fake_async_client(*_args: object, **_kwargs: object) -> _FakeAsyncClient:
+        client = _FakeAsyncClient(capture)
+        capture["clients"].append(client)
+        return client
+
+    monkeypatch.setattr("docugym.narrator.httpx.AsyncClient", fake_async_client)
+
+    narrator = VLMNarrator(
+        base_url="http://localhost:8000/v1",
+        model="Qwen/Qwen3-VL-8B-Instruct-AWQ",
+        max_tokens=80,
+        temperature=0.8,
+        top_p=0.9,
+        image_detail="low",
+    )
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    context = NarrationContext(env_human_name="CartPole v1")
+
+    async def run_twice() -> None:
+        first = await narrator.narrate_frame(frame=frame, context=context)
+        second = await narrator.narrate_frame(frame=frame, context=context)
+        await narrator.aclose()
+        assert first == second == "A calm drift along the edge."
+
+    asyncio.run(run_twice())
+
+    clients = cast("list[_FakeAsyncClient]", capture["clients"])
+    assert len(clients) == 1
+    assert clients[0].is_closed is True
 
 
 def test_wait_until_ready_sync_polls_until_success(monkeypatch) -> None:

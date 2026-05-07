@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from docugym.narration_defaults import (
@@ -59,7 +61,7 @@ def test_validate_narration_config_accepts_valid_values() -> None:
     ],
 )
 def test_validate_narration_config_rejects_invalid_values(
-    kwargs: dict[str, float | int],
+    kwargs: dict[str, Any],
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):

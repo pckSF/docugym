@@ -8,6 +8,8 @@ from typing import Any
 
 import numpy as np
 
+from docugym.queue_utils import push_drop_oldest_sync
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,21 +98,8 @@ class AudioOutput:
         if normalized.size == 0:
             return
 
-        try:
-            self._queue.put_nowait(normalized)
-            return
-        except queue.Full:
-            pass
-
-        try:
-            _ = self._queue.get_nowait()
-        except queue.Empty:
-            pass
-
-        try:
-            self._queue.put_nowait(normalized)
-        except queue.Full:
-            # If producers outrun us heavily, skip this chunk rather than blocking.
+        dropped = push_drop_oldest_sync(self._queue, normalized)
+        if dropped:
             self._stats.dropped_chunks += 1
             logger.debug("Dropped audio chunk due to sustained queue pressure")
 

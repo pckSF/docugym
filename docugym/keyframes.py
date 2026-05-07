@@ -6,6 +6,8 @@ from typing import Callable
 
 import numpy as np
 
+_DELTA_DOWNSAMPLE_STRIDE = 4
+
 
 @dataclass(slots=True)
 class KeyframeDecision:
@@ -54,7 +56,9 @@ class KeyframeSelector:
         current_ts = self._clock() if timestamp is None else timestamp
         self._last_interval_ts = current_ts
         self._last_narration_ts = float("-inf")
-        self._previous_frame = previous_frame
+        self._previous_frame = (
+            _pixel_delta_sample(previous_frame) if previous_frame is not None else None
+        )
 
     def consider(
         self,
@@ -79,11 +83,16 @@ class KeyframeSelector:
         if terminated or truncated:
             reasons.append("episode_boundary")
 
+        current_sample = _pixel_delta_sample(frame)
         if self._previous_frame is not None:
-            visual_delta = mean_abs_pixel_delta(frame, self._previous_frame)
+            visual_delta = mean_abs_pixel_delta(
+                current_sample,
+                self._previous_frame,
+                downsample_stride=1,
+            )
             if visual_delta > self._pixel_delta_threshold:
                 reasons.append("visual_delta")
-        self._previous_frame = frame
+        self._previous_frame = current_sample
 
         if not reasons:
             return None
@@ -98,9 +107,29 @@ class KeyframeSelector:
         self._last_narration_ts = self._clock() if timestamp is None else timestamp
 
 
-def mean_abs_pixel_delta(current: np.ndarray, previous: np.ndarray) -> float:
+def _pixel_delta_sample(frame: np.ndarray) -> np.ndarray:
+    return np.ascontiguousarray(
+        frame[::_DELTA_DOWNSAMPLE_STRIDE, ::_DELTA_DOWNSAMPLE_STRIDE, :3]
+    )
+
+
+def mean_abs_pixel_delta(
+    current: np.ndarray,
+    previous: np.ndarray,
+    *,
+    downsample_stride: int = _DELTA_DOWNSAMPLE_STRIDE,
+) -> float:
     """Return mean absolute RGB pixel delta for two RGB/RGBA frames."""
 
-    current_rgb = current[:, :, :3].astype(np.float32, copy=False)
-    previous_rgb = previous[:, :, :3].astype(np.float32, copy=False)
+    if downsample_stride <= 0:
+        raise ValueError("downsample_stride must be positive")
+
+    current_rgb = current[::downsample_stride, ::downsample_stride, :3].astype(
+        np.float32,
+        copy=False,
+    )
+    previous_rgb = previous[::downsample_stride, ::downsample_stride, :3].astype(
+        np.float32,
+        copy=False,
+    )
     return float(np.mean(np.abs(current_rgb - previous_rgb)))

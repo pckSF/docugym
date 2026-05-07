@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass
+import inspect
 import logging
 import math
 from time import perf_counter
@@ -30,15 +31,15 @@ from docugym.env import (
     make_env,
 )
 from docugym.keyframes import KeyframeSelector
+from docugym.narration_defaults import (
+    DEFAULT_NARRATION_TEXT,
+    validate_narration_config,
+)
 from docugym.narration_events import (
     format_event_summary,
     humanize_env_id,
     join_previous_narrations,
     join_recent_events,
-)
-from docugym.narration_defaults import (
-    DEFAULT_NARRATION_TEXT,
-    validate_narration_config,
 )
 from docugym.narrator import NarrationContext
 from docugym.queue_utils import (
@@ -62,11 +63,19 @@ class RunResult:
     latency_p50_ms: float | None
     latency_p95_ms: float | None
     dropped_narration_candidates: int = 0
+    dropped_keyframe_candidates: int = 0
+    dropped_tts_inputs: int = 0
+    narration_failures: int = 0
+    recording_failed: bool = False
 
 
 @dataclass(slots=True)
 class _FrameEvent:
-    """Frame metadata emitted by the environment producer task."""
+    """Frame metadata emitted by the environment producer task.
+
+    Runtime producers make frames contiguous and read-only before fan-out so
+    selector, display, and recording consumers never observe a mutated env buffer.
+    """
 
     frame: np.ndarray
     step: int
@@ -163,11 +172,9 @@ class SessionRecorderClient(Protocol):
         """Finalize recording artifacts and return saved output path."""
 
 
-def _percentile(values: list[float], quantile: float) -> float | None:
-    if not values:
+def _percentile_sorted(ordered: Sequence[float], quantile: float) -> float | None:
+    if not ordered:
         return None
-
-    ordered = sorted(values)
     if len(ordered) == 1:
         return ordered[0]
 
@@ -180,6 +187,16 @@ def _percentile(values: list[float], quantile: float) -> float | None:
     lower_weight = upper - rank
     upper_weight = rank - lower
     return ordered[lower] * lower_weight + ordered[upper] * upper_weight
+
+
+def _percentiles(
+    values: Sequence[float], quantiles: Sequence[float]
+) -> list[float | None]:
+    if not values:
+        return [None for _ in quantiles]
+
+    ordered = sorted(values)
+    return [_percentile_sorted(ordered, quantile) for quantile in quantiles]
 
 
 def _set_display_flag(display: Any, method_name: str, value: bool) -> None:
@@ -230,6 +247,38 @@ async def _speak_async(
     raise TypeError("Speaker must implement speak or speak_sync")
 
 
+async def _queue_get_until_stop(
+    queue_obj: asyncio.Queue[Any],
+    stop_event: asyncio.Event,
+) -> Any | None:
+    if not queue_obj.empty():
+        return await queue_obj.get()
+
+    get_task = asyncio.create_task(queue_obj.get())
+    stop_task = asyncio.create_task(stop_event.wait())
+    done, pending = await asyncio.wait(
+        {get_task, stop_task},
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    if get_task in done:
+        return get_task.result()
+    return None
+
+
+async def _maybe_call_async_close(client: object) -> None:
+    close = getattr(client, "aclose", None)
+    if callable(close):
+        result = close()
+        if inspect.isawaitable(result):
+            await result
+
+
 async def run_session(
     *,
     env_id: str,
@@ -253,9 +302,9 @@ async def run_session(
     agent_kind: Literal["random", "scripted", "sb3"],
     sb3_repo_id: str | None,
     sb3_filename: str | None,
-    trusted_repo_prefixes: list[str] | tuple[str, ...] = (
-        DEFAULT_TRUSTED_SB3_REPO_PREFIXES
-    ),
+    sb3_algorithm: str | None = None,
+    sb3_device: str = "cpu",
+    trusted_repo_prefixes: Sequence[str] | None = DEFAULT_TRUSTED_SB3_REPO_PREFIXES,
     enforce_trusted_repo: bool = False,
     voice_enabled: bool = False,
     tts_engine: Literal["kokoro", "xtts", "chatterbox"] = "kokoro",
@@ -312,6 +361,8 @@ async def run_session(
             filename=sb3_filename,
             trusted_repo_prefixes=trusted_repo_prefixes,
             enforce_trusted_repo=enforce_trusted_repo,
+            algorithm=sb3_algorithm,
+            device=sb3_device,
         )
 
     active_speaker = speaker
@@ -363,12 +414,15 @@ async def run_session(
     tts_q: asyncio.Queue[str] = asyncio.Queue(maxsize=2)
 
     stop_event = asyncio.Event()
-    narration_sem = asyncio.Semaphore(1)
-    tts_sem = asyncio.Semaphore(1)
+    pause_event = asyncio.Event()
+    pause_event.set()
 
-    latency_samples_ms: list[float] = []
+    latency_samples_ms: deque[float] = deque(maxlen=256)
     narration_count = 0
-    dropped_narration_candidates = 0
+    dropped_keyframe_candidates = 0
+    dropped_tts_inputs = 0
+    narration_failures = 0
+    recording_failed = False
     rendered_steps = 0
     paused = False
     audio_muted = not tts_active
@@ -387,9 +441,7 @@ async def run_session(
         episode_reward = 0.0
 
         while not stop_event.is_set():
-            if paused:
-                await asyncio.sleep(0.01)
-                continue
+            await pause_event.wait()
 
             if policy is not None and not policy_disabled:
                 try:
@@ -399,6 +451,7 @@ async def run_session(
                         "SB3 policy prediction failed, "
                         "falling back to random actions: %s",
                         exc,
+                        exc_info=True,
                     )
                     policy_disabled = True
                     action = random_agent.act(observation)
@@ -416,6 +469,8 @@ async def run_session(
                     "Expected render_mode='rgb_array' to return numpy.ndarray, "
                     f"got {type(frame)!r}"
                 )
+            frame = np.ascontiguousarray(frame)
+            frame.flags.writeable = False
 
             step += 1
             rendered_steps = step
@@ -459,7 +514,7 @@ async def run_session(
             await asyncio.sleep(0)
 
     async def keyframe_task() -> None:
-        nonlocal dropped_narration_candidates
+        nonlocal dropped_keyframe_candidates
 
         selector = KeyframeSelector(
             interval_seconds=narration_interval_seconds,
@@ -469,9 +524,8 @@ async def run_session(
         )
 
         while not stop_event.is_set() or not frame_q.empty():
-            try:
-                frame_event = await asyncio.wait_for(frame_q.get(), timeout=0.1)
-            except TimeoutError:
+            frame_event = await _queue_get_until_stop(frame_q, stop_event)
+            if frame_event is None:
                 continue
 
             now = frame_event.timestamp
@@ -504,7 +558,7 @@ async def run_session(
                 ),
             )
             if dropped:
-                dropped_narration_candidates += 1
+                dropped_keyframe_candidates += 1
                 logger.info(
                     "Dropped stale narration candidate at step=%d due backlog",
                     frame_event.step,
@@ -515,12 +569,12 @@ async def run_session(
             await asyncio.sleep(0)
 
     async def narrator_task() -> None:
-        nonlocal narration_count, dropped_narration_candidates, latest_narration_text
+        nonlocal narration_count, dropped_tts_inputs, latest_narration_text
+        nonlocal narration_failures
 
         while not stop_event.is_set() or not narration_q.empty():
-            try:
-                candidate = await asyncio.wait_for(narration_q.get(), timeout=0.1)
-            except TimeoutError:
+            candidate = await _queue_get_until_stop(narration_q, stop_event)
+            if candidate is None:
                 continue
 
             previous_text = join_previous_narrations(previous_narrations)
@@ -532,17 +586,18 @@ async def run_session(
 
             started = perf_counter()
             try:
-                async with narration_sem:
-                    narration = await _narrate_async(
-                        narrator=narrator,
-                        frame=candidate.frame,
-                        context=context,
-                    )
+                narration = await _narrate_async(
+                    narrator=narrator,
+                    frame=candidate.frame,
+                    context=context,
+                )
             except Exception as exc:
+                narration_failures += 1
                 logger.warning(
                     "Narration request failed at step=%d: %s",
                     candidate.step,
                     exc,
+                    exc_info=True,
                 )
                 narration = DEFAULT_NARRATION_TEXT
 
@@ -552,12 +607,16 @@ async def run_session(
             previous_narrations.append(narration)
             latest_narration_text = narration
 
-            _ = push_drop_oldest_async(subtitle_q, narration)
+            tts_can_own_subtitles = (
+                tts_active and active_speaker is not None and not audio_muted
+            )
+            if not tts_can_own_subtitles:
+                _ = push_drop_oldest_async(subtitle_q, narration)
 
-            if tts_active and active_speaker is not None and not audio_muted:
+            if tts_can_own_subtitles:
                 dropped_tts = push_drop_oldest_async(tts_q, narration)
                 if dropped_tts:
-                    dropped_narration_candidates += 1
+                    dropped_tts_inputs += 1
                     logger.info(
                         "Dropped queued narration text at step=%d due TTS backlog",
                         candidate.step,
@@ -571,55 +630,68 @@ async def run_session(
                 narration,
             )
             if on_narration is not None:
-                on_narration(narration, candidate.step, latency_ms)
+                try:
+                    await asyncio.to_thread(
+                        on_narration,
+                        narration,
+                        candidate.step,
+                        latency_ms,
+                    )
+                except Exception as exc:  # pragma: no cover - user callback path
+                    logger.warning(
+                        "Ignoring on_narration callback failure: %s",
+                        exc,
+                        exc_info=True,
+                    )
 
             await asyncio.sleep(0)
 
     async def tts_task() -> None:
-        nonlocal active_recorder, audio_muted
+        nonlocal active_recorder, audio_muted, recording_failed
 
         if not tts_active or active_speaker is None or active_audio_output is None:
             return
 
         while not stop_event.is_set() or not tts_q.empty():
-            try:
-                text = await asyncio.wait_for(tts_q.get(), timeout=0.1)
-            except TimeoutError:
+            text = await _queue_get_until_stop(tts_q, stop_event)
+            if text is None:
                 continue
 
             try:
-                async with tts_sem:
+                if audio_muted:
+                    continue
+
+                _set_display_flag(display, "set_narrating", True)
+                async for sentence in _speak_async(active_speaker, text):
                     if audio_muted:
-                        continue
+                        break
 
-                    _set_display_flag(display, "set_narrating", True)
-                    async for sentence in _speak_async(active_speaker, text):
-                        if audio_muted:
-                            break
-
-                        subtitle_text = sentence.graphemes.strip()
-                        if subtitle_text:
-                            _ = push_drop_oldest_async(subtitle_q, subtitle_text)
-                        for chunk in sentence.chunks:
-                            if active_recorder is not None:
-                                try:
-                                    active_recorder.write_audio_chunk(
-                                        chunk,
-                                        timestamp=perf_counter(),
-                                    )
-                                except Exception as exc:
-                                    logger.warning(
-                                        "Disabling recording after audio failure: %s",
-                                        exc,
-                                    )
-                                    active_recorder = None
-                            active_audio_output.enqueue(chunk)
-                        if stop_event.is_set():
-                            break
+                    subtitle_text = sentence.graphemes.strip()
+                    if subtitle_text:
+                        _ = push_drop_oldest_async(subtitle_q, subtitle_text)
+                    for chunk in sentence.chunks:
+                        active_audio_output.enqueue(chunk)
+                        if active_recorder is not None:
+                            try:
+                                active_recorder.write_audio_chunk(
+                                    chunk,
+                                    timestamp=perf_counter(),
+                                )
+                            except Exception as exc:
+                                recording_failed = True
+                                logger.warning(
+                                    "Disabling recording after audio failure: %s",
+                                    exc,
+                                    exc_info=True,
+                                )
+                                active_recorder = None
+                    if stop_event.is_set():
+                        break
             except Exception as exc:
                 logger.warning(
                     "TTS synthesis failed; continuing subtitle-only: %s",
                     exc,
+                    exc_info=True,
                 )
             finally:
                 _set_display_flag(display, "set_narrating", False)
@@ -627,7 +699,8 @@ async def run_session(
             await asyncio.sleep(0)
 
     async def display_task() -> None:
-        nonlocal active_recorder, paused, audio_muted, dropped_narration_candidates
+        nonlocal active_recorder, paused, audio_muted, dropped_keyframe_candidates
+        nonlocal recording_failed
 
         latest_display: _DisplayEvent | None = None
 
@@ -653,9 +726,11 @@ async def run_session(
                 try:
                     active_recorder.write_video_frame(latest_display.frame)
                 except Exception as exc:
+                    recording_failed = True
                     logger.warning(
                         "Disabling recording after video write failure: %s",
                         exc,
+                        exc_info=True,
                     )
                     active_recorder = None
 
@@ -669,6 +744,10 @@ async def run_session(
                 if action == "toggle_pause":
                     paused = transition.paused
                     _set_display_flag(display, "set_paused", paused)
+                    if paused:
+                        pause_event.clear()
+                    else:
+                        pause_event.set()
                     logger.info("Playback pause toggled: paused=%s", paused)
                     continue
 
@@ -701,7 +780,7 @@ async def run_session(
                         ),
                     )
                     if dropped:
-                        dropped_narration_candidates += 1
+                        dropped_keyframe_candidates += 1
                         logger.info(
                             "Dropped forced narration candidate at step=%d due backlog",
                             latest_display.step,
@@ -723,7 +802,11 @@ async def run_session(
                             narration_path,
                         )
                     except Exception as exc:
-                        logger.warning("Failed to save clip snapshot: %s", exc)
+                        logger.warning(
+                            "Failed to save clip snapshot: %s",
+                            exc,
+                            exc_info=True,
+                        )
 
             await asyncio.sleep(0)
 
@@ -739,28 +822,38 @@ async def run_session(
         await asyncio.gather(*tasks)
     finally:
         stop_event.set()
+        pause_event.set()
         for task in tasks:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+        end_ts = perf_counter()
         if tts_active and active_audio_output is not None:
             active_audio_output.stop()
         if active_recorder is not None:
             try:
-                saved_path = active_recorder.close(end_timestamp=perf_counter())
+                saved_path = active_recorder.close(end_timestamp=end_ts)
                 if saved_path is None:
                     logger.info("Recording discarded because no frames were rendered")
             except Exception as exc:
-                logger.warning("Failed to finalize recording: %s", exc)
+                recording_failed = True
+                logger.warning("Failed to finalize recording: %s", exc, exc_info=True)
+        await _maybe_call_async_close(narrator)
         display.close()
         env.close()
 
+    latency_p50_ms, latency_p95_ms = _percentiles(latency_samples_ms, (0.50, 0.95))
+    dropped_narration_candidates = dropped_keyframe_candidates + dropped_tts_inputs
     return RunResult(
         rendered_steps=rendered_steps,
         narration_count=narration_count,
         dropped_narration_candidates=dropped_narration_candidates,
-        latency_p50_ms=_percentile(latency_samples_ms, 0.50),
-        latency_p95_ms=_percentile(latency_samples_ms, 0.95),
+        dropped_keyframe_candidates=dropped_keyframe_candidates,
+        dropped_tts_inputs=dropped_tts_inputs,
+        narration_failures=narration_failures,
+        recording_failed=recording_failed,
+        latency_p50_ms=latency_p50_ms,
+        latency_p95_ms=latency_p95_ms,
     )
 
 

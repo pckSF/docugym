@@ -4,7 +4,7 @@ tags: [stage-6, runtime, asyncio, keyframes, narration, backpressure]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-5-local-tts-streaming-audio.md, stage-4-vlm-narration-sync.md, 2026-04-27-voice-toggle-subtitle-only-mode.md, stage-7-ui-polish-and-keyboard-controls.md, final-setup-runtime-and-naming-consolidation.md]
+related: [stage-5-local-tts-streaming-audio.md, stage-4-vlm-narration-sync.md, 2026-04-27-voice-toggle-subtitle-only-mode.md, stage-7-ui-polish-and-keyboard-controls.md, final-setup-runtime-and-naming-consolidation.md, 2026-05-07-code-review-idiomatic-and-performance-issues.md]
 ---
 
 # Stage 6 Async Orchestration and Keyframe Selection
