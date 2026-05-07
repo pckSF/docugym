@@ -15,6 +15,7 @@ from PIL import Image
 
 from docugym.audio import AudioOutput
 from docugym.display import Display, DisplayAction
+from docugym.keyframes import KeyframeSelector
 from docugym.narrator import NarrationContext, VLMNarrator
 from docugym.tts import KokoroTTS, SpeechSentence
 
@@ -70,12 +71,6 @@ def _save_clip_snapshot(
     _save_frame_png(frame=frame, path=frame_path)
     narration_path.write_text(f"{narration.strip()}\n", encoding="utf-8")
     return frame_path, narration_path
-
-
-def _mean_abs_pixel_delta(current: np.ndarray, previous: np.ndarray) -> float:
-    current_rgb = current[:, :, :3].astype(np.float32, copy=False)
-    previous_rgb = previous[:, :, :3].astype(np.float32, copy=False)
-    return float(np.mean(np.abs(current_rgb - previous_rgb)))
 
 
 def _push_drop_oldest_queue(queue_obj: queue.Queue[Any], item: Any) -> bool:
@@ -198,10 +193,12 @@ class DocuWrapper(gym.Wrapper):
             )
             self._audio_output.start()
 
-        self._narration_interval_seconds = narration_interval_seconds
-        self._min_gap_seconds = min_gap_seconds
-        self._reward_spike_threshold = reward_spike_threshold
-        self._pixel_delta_threshold = pixel_delta_threshold
+        self._keyframe_selector = KeyframeSelector(
+            interval_seconds=narration_interval_seconds,
+            min_gap_seconds=min_gap_seconds,
+            reward_spike_threshold=reward_spike_threshold,
+            pixel_delta_threshold=pixel_delta_threshold,
+        )
 
         self._on_narration = on_narration
         self._on_subtitle = on_subtitle
@@ -222,14 +219,9 @@ class DocuWrapper(gym.Wrapper):
 
         self._session_step = 0
         self._episode_reward = 0.0
-        self._previous_frame: np.ndarray | None = None
         self._latest_frame: np.ndarray | None = None
         self._latest_narration = "A pause. The creature gathers itself."
         self._latest_subtitle = self._latest_narration
-
-        now = perf_counter()
-        self._last_interval_ts = now
-        self._last_narration_ts = float("-inf")
 
         self._paused = False
         self._narrating = False
@@ -260,7 +252,10 @@ class DocuWrapper(gym.Wrapper):
         frame = self.env.render()
         frame_array = self._require_frame(frame)
         self._latest_frame = frame_array
-        self._previous_frame = np.array(frame_array, copy=True)
+        self._keyframe_selector.reset(
+            previous_frame=np.array(frame_array, copy=True),
+            timestamp=perf_counter(),
+        )
 
         self._render_current_frame(frame_array)
         if not self._window_open:
@@ -294,7 +289,6 @@ class DocuWrapper(gym.Wrapper):
         self._handle_actions(frame_array)
         self._hold_if_paused()
 
-        self._previous_frame = np.array(frame_array, copy=True)
         if self._window_open is False:
             truncated = True
 
@@ -518,7 +512,12 @@ class DocuWrapper(gym.Wrapper):
                 continue
 
             if action == "force_narrate":
-                self._enqueue_narration(frame=frame, reward=0.0, manual=True)
+                self._enqueue_narration(
+                    frame=frame,
+                    reward=0.0,
+                    manual=True,
+                    timestamp=perf_counter(),
+                )
                 continue
 
             if action == "save_clip":
@@ -568,37 +567,25 @@ class DocuWrapper(gym.Wrapper):
         terminated: bool,
         truncated: bool,
     ) -> None:
-        reasons: list[str] = []
         now = perf_counter()
-        visual_delta: float | None = None
-
-        if now - self._last_interval_ts >= self._narration_interval_seconds:
-            reasons.append("cadence")
-            self._last_interval_ts = now
-        if abs(reward) > self._reward_spike_threshold:
-            reasons.append("reward_spike")
-        if terminated or truncated:
-            reasons.append("episode_boundary")
-
-        if self._previous_frame is not None:
-            visual_delta = _mean_abs_pixel_delta(frame, self._previous_frame)
-            if visual_delta > self._pixel_delta_threshold:
-                reasons.append("visual_delta")
-
-        if not reasons:
-            return
-
-        if now - self._last_narration_ts < self._min_gap_seconds:
+        decision = self._keyframe_selector.consider(
+            frame=frame,
+            reward=reward,
+            terminated=terminated,
+            truncated=truncated,
+            timestamp=now,
+        )
+        if decision is None:
             return
 
         self._enqueue_narration(
             frame=frame,
             reward=reward,
-            reasons=reasons,
-            visual_delta=visual_delta,
+            reasons=decision.reasons,
+            visual_delta=decision.visual_delta,
             manual=False,
+            timestamp=now,
         )
-        self._last_narration_ts = now
 
     def _enqueue_narration(
         self,
@@ -608,6 +595,7 @@ class DocuWrapper(gym.Wrapper):
         reasons: list[str] | None = None,
         visual_delta: float | None = None,
         manual: bool,
+        timestamp: float,
     ) -> None:
         trigger_reasons = reasons or ["manual"]
         delta_text = "n/a" if visual_delta is None else f"{visual_delta:.2f}"
@@ -640,8 +628,8 @@ class DocuWrapper(gym.Wrapper):
                 "Dropped stale wrapper narration candidate at step=%d",
                 self._session_step,
             )
-        elif manual:
-            self._last_narration_ts = perf_counter()
+        else:
+            self._keyframe_selector.mark_narration_enqueued(timestamp=timestamp)
 
     @staticmethod
     def _require_frame(frame: Any) -> np.ndarray:

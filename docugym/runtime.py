@@ -28,6 +28,7 @@ from docugym.env import (
     load_sb3_policy,
     make_env,
 )
+from docugym.keyframes import KeyframeSelector
 from docugym.narrator import NarrationContext
 
 logger = logging.getLogger(__name__)
@@ -226,12 +227,6 @@ def _save_clip_snapshot(
     _save_frame_png(frame=frame, path=frame_path)
     narration_path.write_text(f"{narration.strip()}\n", encoding="utf-8")
     return frame_path, narration_path
-
-
-def _mean_abs_pixel_delta(current: np.ndarray, previous: np.ndarray) -> float:
-    current_rgb = current[:, :, :3].astype(np.float32, copy=False)
-    previous_rgb = previous[:, :, :3].astype(np.float32, copy=False)
-    return float(np.mean(np.abs(current_rgb - previous_rgb)))
 
 
 def _push_drop_oldest(queue_obj: asyncio.Queue[Any], item: Any) -> bool:
@@ -535,9 +530,12 @@ async def run_session(
     async def keyframe_task() -> None:
         nonlocal dropped_narration_candidates
 
-        previous_frame: np.ndarray | None = None
-        last_interval_ts = perf_counter()
-        last_narration_ts = float("-inf")
+        selector = KeyframeSelector(
+            interval_seconds=narration_interval_seconds,
+            min_gap_seconds=min_gap_seconds,
+            reward_spike_threshold=reward_spike_threshold,
+            pixel_delta_threshold=pixel_delta_threshold,
+        )
 
         while not stop_event.is_set() or not frame_q.empty():
             try:
@@ -545,33 +543,26 @@ async def run_session(
             except TimeoutError:
                 continue
 
-            reasons: list[str] = []
             now = frame_event.timestamp
-            visual_delta: float | None = None
-
-            if now - last_interval_ts >= narration_interval_seconds:
-                reasons.append("cadence")
-                last_interval_ts = now
-            if abs(frame_event.reward) > reward_spike_threshold:
-                reasons.append("reward_spike")
-            if frame_event.terminated or frame_event.truncated:
-                reasons.append("episode_boundary")
-            if previous_frame is not None:
-                visual_delta = _mean_abs_pixel_delta(frame_event.frame, previous_frame)
-                if visual_delta > pixel_delta_threshold:
-                    reasons.append("visual_delta")
-            previous_frame = frame_event.frame
-
-            if not reasons:
-                continue
-            if now - last_narration_ts < min_gap_seconds:
+            decision = selector.consider(
+                frame=frame_event.frame,
+                reward=frame_event.reward,
+                terminated=frame_event.terminated,
+                truncated=frame_event.truncated,
+                timestamp=now,
+            )
+            if decision is None:
                 continue
 
-            delta_text = "n/a" if visual_delta is None else f"{visual_delta:.2f}"
+            delta_text = (
+                "n/a"
+                if decision.visual_delta is None
+                else f"{decision.visual_delta:.2f}"
+            )
             event_summary = (
                 f"step {frame_event.step}; reward {frame_event.reward:+.2f}; "
                 f"episode reward {frame_event.episode_reward:+.2f}; "
-                f"delta {delta_text}; triggers {','.join(reasons)}"
+                f"delta {delta_text}; triggers {','.join(decision.reasons)}"
             )
             recent_events.append(event_summary)
 
@@ -591,7 +582,7 @@ async def run_session(
                     frame_event.step,
                 )
             else:
-                last_narration_ts = now
+                selector.mark_narration_enqueued(timestamp=now)
 
             await asyncio.sleep(0)
 

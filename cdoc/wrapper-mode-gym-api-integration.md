@@ -37,6 +37,17 @@ adding live DocuGym narration/subtitles and command-like toggles as constructor 
 - Added focused wrapper tests validating metadata emission, callback wiring,
   force-narrate, and pause hold/release behavior.
 
+### Implemented Phase 2 Outcome
+
+- Extracted shared keyframe trigger/cooldown logic into `docugym/keyframes.py`
+  (`KeyframeSelector`, `KeyframeDecision`, `mean_abs_pixel_delta`).
+- Updated `docugym/runtime.py` keyframe task to consume shared selector logic,
+  preserving stale-candidate drop policy and enqueue-on-success cooldown updates.
+- Updated `docugym/wrapper.py` to use the same selector in wrapper mode,
+  reducing drift risk between wrapper and CLI narration trigger behavior.
+- Added `tests/test_keyframes.py` to lock cadence/reward/delta trigger semantics
+  and cooldown behavior independent of runtime orchestration details.
+
 ## Options Considered
 
 #### Option 1: Keep CLI-only production surface
@@ -79,3 +90,5 @@ recommended production path for recording and full run management.
 
 - 2026-05-07: Created decision note for Phase 1 `docuwrapper(env, ...)` implementation,
   tests, and README documentation.
+- 2026-05-07: Updated for Phase 2 refactor that shares keyframe selection logic
+  between wrapper and canonical runtime paths.
