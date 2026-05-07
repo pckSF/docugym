@@ -12,8 +12,9 @@ agent:
   kind: "sb3"
   sb3_repo_id: "sb3/ppo-SpaceInvadersNoFrameskip-v4"
   sb3_filename: "ppo-SpaceInvadersNoFrameskip-v4.zip"
+  sb3_revision: "c0741d2e949614ef905e2489241c3032d1c9cce3"
   trusted_repo_prefixes: ["sb3/"]
-  enforce_trusted_repo: false
+  enforce_trusted_repo: true
 
 vlm:
   base_url: "http://localhost:8000/v1"

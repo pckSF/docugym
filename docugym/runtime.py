@@ -305,7 +305,8 @@ async def run_session(
     sb3_algorithm: str | None = None,
     sb3_device: str = "cpu",
     trusted_repo_prefixes: Sequence[str] | None = DEFAULT_TRUSTED_SB3_REPO_PREFIXES,
-    enforce_trusted_repo: bool = False,
+    enforce_trusted_repo: bool = True,
+    sb3_revision: str | None = None,
     voice_enabled: bool = False,
     tts_engine: Literal["kokoro", "xtts", "chatterbox"] = "kokoro",
     tts_voice: str = "bm_george",
@@ -361,6 +362,7 @@ async def run_session(
             filename=sb3_filename,
             trusted_repo_prefixes=trusted_repo_prefixes,
             enforce_trusted_repo=enforce_trusted_repo,
+            revision=sb3_revision,
             algorithm=sb3_algorithm,
             device=sb3_device,
         )

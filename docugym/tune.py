@@ -56,7 +56,8 @@ def run_prompt_tuning(
     sb3_repo_id: str | None,
     sb3_filename: str | None,
     trusted_repo_prefixes: list[str] | tuple[str, ...] | None,
-    enforce_trusted_repo: bool,
+    enforce_trusted_repo: bool = True,
+    sb3_revision: str | None = None,
     sb3_algorithm: str | None = None,
     sb3_device: str = "cpu",
     env_kwargs: dict[str, Any] | None = None,
@@ -85,6 +86,7 @@ def run_prompt_tuning(
             filename=sb3_filename,
             trusted_repo_prefixes=trusted_repo_prefixes,
             enforce_trusted_repo=enforce_trusted_repo,
+            revision=sb3_revision,
             algorithm=sb3_algorithm,
             device=sb3_device,
         )

@@ -16,17 +16,23 @@ lags gameplay by about one to two seconds but still feels synchronized and infor
 sudo apt-get update && sudo apt-get install -y ffmpeg
 ```
 
-2. Install project dependencies:
+2. Install project dependencies, including the local voice and VLM sidecar extras:
 
 ```bash
-uv sync
+uv sync --extra voice --extra vlm
 ```
+
+For subtitle-only runs against an already managed VLM endpoint, `uv sync` is enough.
 
 3. Start the local VLM sidecar:
 
 ```bash
 scripts/serve_vlm.sh
 ```
+
+The sidecar binds to `127.0.0.1` by default. To bind a non-loopback host, set
+both `DOCUGYM_VLM_HOST` and `DOCUGYM_VLM_ALLOW_PUBLIC=1`, and put the endpoint
+behind appropriate network controls.
 
 4. In another terminal, run with a preset config:
 

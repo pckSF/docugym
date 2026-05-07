@@ -30,10 +30,11 @@ class AgentSettings(BaseModel):
     kind: Literal["sb3", "random", "scripted"] = "sb3"
     sb3_repo_id: str = "sb3/ppo-SpaceInvadersNoFrameskip-v4"
     sb3_filename: str = "ppo-SpaceInvadersNoFrameskip-v4.zip"
+    sb3_revision: str | None = "c0741d2e949614ef905e2489241c3032d1c9cce3"
     sb3_algorithm: Literal["a2c", "dqn", "ppo", "sac", "td3"] | None = None
     device: str = "cpu"
     trusted_repo_prefixes: list[str] = Field(default_factory=lambda: ["sb3/"])
-    enforce_trusted_repo: bool = False
+    enforce_trusted_repo: bool = True
 
 
 class VLMSettings(BaseModel):

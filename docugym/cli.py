@@ -203,6 +203,11 @@ def smoketest(
         "--filename",
         help="Policy file name inside the SB3 Hugging Face repo.",
     ),
+    revision: str | None = typer.Option(
+        None,
+        "--revision",
+        help="Optional Hugging Face commit SHA, tag, or branch for SB3 download.",
+    ),
     env_kwargs: str | None = typer.Option(
         None,
         "--env-kwargs",
@@ -218,6 +223,9 @@ def smoketest(
     effective_seed = config.run.seed if seed is None else seed
     effective_repo_id = repo_id or config.agent.sb3_repo_id
     effective_filename = filename or config.agent.sb3_filename
+    effective_revision = revision
+    if effective_revision is None and repo_id is None:
+        effective_revision = config.agent.sb3_revision
 
     effective_env_kwargs: dict[str, Any] = {}
     if env is None or env_id == config.run.env_id:
@@ -235,6 +243,7 @@ def smoketest(
         sb3_filename=effective_filename,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
         enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        sb3_revision=effective_revision,
         sb3_algorithm=config.agent.sb3_algorithm,
         sb3_device=config.agent.device,
     )
@@ -430,6 +439,11 @@ def run(
             "Use only trusted model artifacts."
         ),
     ),
+    revision: str | None = typer.Option(
+        None,
+        "--revision",
+        help="Optional Hugging Face commit SHA, tag, or branch for SB3 download.",
+    ),
     voice: bool | None = typer.Option(
         None,
         "--voice/--no-voice",
@@ -502,6 +516,9 @@ def run(
     effective_agent = config.agent.kind if agent is None else agent
     effective_repo_id = repo_id or config.agent.sb3_repo_id
     effective_filename = filename or config.agent.sb3_filename
+    effective_revision = revision
+    if effective_revision is None and repo_id is None and policy is None:
+        effective_revision = config.agent.sb3_revision
     if policy:
         effective_agent = "sb3"
         effective_repo_id = policy
@@ -560,6 +577,7 @@ def run(
         sb3_filename=effective_filename,
         sb3_algorithm=config.agent.sb3_algorithm,
         sb3_device=config.agent.device,
+        sb3_revision=effective_revision,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
         enforce_trusted_repo=config.agent.enforce_trusted_repo,
         voice_enabled=effective_voice,
@@ -635,6 +653,11 @@ def tune_prompt(
         "--filename",
         help="Policy filename inside the SB3 Hugging Face repo.",
     ),
+    revision: str | None = typer.Option(
+        None,
+        "--revision",
+        help="Optional Hugging Face commit SHA, tag, or branch for SB3 download.",
+    ),
     wait_for_vlm: bool = typer.Option(
         False,
         "--wait-for-vlm",
@@ -662,6 +685,9 @@ def tune_prompt(
     effective_agent = config.agent.kind if agent is None else agent
     effective_repo_id = repo_id or config.agent.sb3_repo_id
     effective_filename = filename or config.agent.sb3_filename
+    effective_revision = revision
+    if effective_revision is None and repo_id is None and policy is None:
+        effective_revision = config.agent.sb3_revision
     if policy:
         effective_agent = "sb3"
         effective_repo_id = policy
@@ -707,6 +733,7 @@ def tune_prompt(
         sb3_filename=effective_filename,
         sb3_algorithm=config.agent.sb3_algorithm,
         sb3_device=config.agent.device,
+        sb3_revision=effective_revision,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
         enforce_trusted_repo=config.agent.enforce_trusted_repo,
         env_kwargs=effective_env_kwargs,

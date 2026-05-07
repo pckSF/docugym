@@ -153,14 +153,19 @@ def test_load_sb3_policy_downloads_to_docugym_cache(
     downloaded = tmp_path / "downloaded.zip"
     downloaded.write_text("model", encoding="utf-8")
 
-    hf_calls: list[tuple[str, str]] = []
-    hf_module = types.ModuleType("huggingface_sb3")
+    hf_calls: list[tuple[str, str, str | None]] = []
+    hf_module = types.ModuleType("huggingface_hub")
 
-    def fake_load_from_hub(*, repo_id: str, filename: str) -> str:
-        hf_calls.append((repo_id, filename))
+    def fake_hf_hub_download(
+        *,
+        repo_id: str,
+        filename: str,
+        revision: str | None = None,
+    ) -> str:
+        hf_calls.append((repo_id, filename, revision))
         return str(downloaded)
 
-    setattr(hf_module, "load_from_hub", fake_load_from_hub)
+    setattr(hf_module, "hf_hub_download", fake_hf_hub_download)
 
     sb3_module = types.ModuleType("stable_baselines3")
     setattr(sb3_module, "A2C", DummyAlgo)
@@ -169,7 +174,7 @@ def test_load_sb3_policy_downloads_to_docugym_cache(
     setattr(sb3_module, "SAC", DummyAlgo)
     setattr(sb3_module, "TD3", DummyAlgo)
 
-    monkeypatch.setitem(sys.modules, "huggingface_sb3", hf_module)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hf_module)
     monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
     monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
     DummyAlgo.load_calls = []
@@ -182,7 +187,7 @@ def test_load_sb3_policy_downloads_to_docugym_cache(
 
     assert Path(first["loaded_from"]).resolve() == cache_path
     assert Path(second["loaded_from"]).resolve() == cache_path
-    assert hf_calls == [(repo_id, filename)]
+    assert hf_calls == [(repo_id, filename, None)]
     assert cache_path.exists()
     assert DummyAlgo.load_calls == [str(cache_path), str(cache_path)]
     assert DummyAlgo.load_kwargs == [{"device": "cpu"}, {"device": "cpu"}]
@@ -198,11 +203,11 @@ def test_load_sb3_policy_accepts_explicit_algorithm_and_device(
     downloaded = tmp_path / "downloaded.zip"
     downloaded.write_text("model", encoding="utf-8")
 
-    hf_module = types.ModuleType("huggingface_sb3")
+    hf_module = types.ModuleType("huggingface_hub")
     setattr(
         hf_module,
-        "load_from_hub",
-        lambda *, repo_id, filename: str(downloaded),
+        "hf_hub_download",
+        lambda *, repo_id, filename, revision=None: str(downloaded),
     )
 
     sb3_module = types.ModuleType("stable_baselines3")
@@ -212,7 +217,7 @@ def test_load_sb3_policy_accepts_explicit_algorithm_and_device(
     setattr(sb3_module, "SAC", DummyAlgo)
     setattr(sb3_module, "TD3", DummyAlgo)
 
-    monkeypatch.setitem(sys.modules, "huggingface_sb3", hf_module)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hf_module)
     monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
     monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
     DummyAlgo.load_calls = []
@@ -249,6 +254,58 @@ def test_run_smoketest_saves_requested_number_of_frames(
     assert env.closed is True
 
 
+def test_load_sb3_policy_uses_revision_in_download_and_cache(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_id = "sb3/ppo-LunarLander-v2"
+    filename = "ppo-LunarLander-v2.zip"
+    revision = "0961e4e83c29ec7dd52be7dd08f7c045cb23bda3"
+
+    downloaded = tmp_path / "downloaded.zip"
+    downloaded.write_text("model", encoding="utf-8")
+
+    hf_calls: list[tuple[str, str, str | None]] = []
+    hf_module = types.ModuleType("huggingface_hub")
+
+    def fake_hf_hub_download(
+        *,
+        repo_id: str,
+        filename: str,
+        revision: str | None = None,
+    ) -> str:
+        hf_calls.append((repo_id, filename, revision))
+        return str(downloaded)
+
+    setattr(hf_module, "hf_hub_download", fake_hf_hub_download)
+
+    sb3_module = types.ModuleType("stable_baselines3")
+    setattr(sb3_module, "A2C", DummyAlgo)
+    setattr(sb3_module, "DQN", DummyAlgo)
+    setattr(sb3_module, "PPO", DummyAlgo)
+    setattr(sb3_module, "SAC", DummyAlgo)
+    setattr(sb3_module, "TD3", DummyAlgo)
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hf_module)
+    monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
+    monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
+    DummyAlgo.load_calls = []
+    DummyAlgo.load_kwargs = []
+
+    loaded = cast(
+        "dict[str, str]",
+        load_sb3_policy(repo_id=repo_id, filename=filename, revision=revision),
+    )
+
+    cache_path = (
+        tmp_path / "cache" / "sb3--ppo-LunarLander-v2" / revision / filename
+    ).resolve()
+
+    assert Path(loaded["loaded_from"]).resolve() == cache_path
+    assert hf_calls == [(repo_id, filename, revision)]
+    assert DummyAlgo.load_calls == [str(cache_path)]
+
+
 def test_policy_cache_dir_constant_uses_home() -> None:
     assert isinstance(POLICY_CACHE_DIR, Path)
 
@@ -264,11 +321,11 @@ def test_load_sb3_policy_warns_on_untrusted_repo(
     downloaded = tmp_path / "downloaded.zip"
     downloaded.write_text("model", encoding="utf-8")
 
-    hf_module = types.ModuleType("huggingface_sb3")
+    hf_module = types.ModuleType("huggingface_hub")
     setattr(
         hf_module,
-        "load_from_hub",
-        lambda *, repo_id, filename: str(downloaded),
+        "hf_hub_download",
+        lambda *, repo_id, filename, revision=None: str(downloaded),
     )
 
     sb3_module = types.ModuleType("stable_baselines3")
@@ -278,7 +335,7 @@ def test_load_sb3_policy_warns_on_untrusted_repo(
     setattr(sb3_module, "SAC", DummyAlgo)
     setattr(sb3_module, "TD3", DummyAlgo)
 
-    monkeypatch.setitem(sys.modules, "huggingface_sb3", hf_module)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hf_module)
     monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
     monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
     DummyAlgo.load_calls = []
@@ -305,11 +362,11 @@ def test_load_sb3_policy_rejects_untrusted_repo_when_enforced(
     downloaded = tmp_path / "downloaded.zip"
     downloaded.write_text("model", encoding="utf-8")
 
-    hf_module = types.ModuleType("huggingface_sb3")
+    hf_module = types.ModuleType("huggingface_hub")
     setattr(
         hf_module,
-        "load_from_hub",
-        lambda *, repo_id, filename: str(downloaded),
+        "hf_hub_download",
+        lambda *, repo_id, filename, revision=None: str(downloaded),
     )
 
     sb3_module = types.ModuleType("stable_baselines3")
@@ -319,7 +376,7 @@ def test_load_sb3_policy_rejects_untrusted_repo_when_enforced(
     setattr(sb3_module, "SAC", DummyAlgo)
     setattr(sb3_module, "TD3", DummyAlgo)
 
-    monkeypatch.setitem(sys.modules, "huggingface_sb3", hf_module)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hf_module)
     monkeypatch.setitem(sys.modules, "stable_baselines3", sb3_module)
     monkeypatch.setattr("docugym.env.POLICY_CACHE_DIR", tmp_path / "cache")
 

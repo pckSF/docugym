@@ -11,6 +11,7 @@ agent:
   kind: "sb3"
   sb3_repo_id: "sb3/ppo-MsPacmanNoFrameskip-v4"
   sb3_filename: "ppo-MsPacmanNoFrameskip-v4.zip"
+  sb3_revision: "4dd9c31630df6155d57d1b4bbab373fc8dc4c96a"
 
 narration:
   interval_seconds: 3.0

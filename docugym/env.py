@@ -87,26 +87,40 @@ def make_env(
     return env
 
 
-def _resolve_cached_policy_path(repo_id: str, filename: str) -> Path:
+def _resolve_cached_policy_path(
+    repo_id: str,
+    filename: str,
+    revision: str | None = None,
+) -> Path:
     repo_dir = repo_id.replace("/", "--")
+    if revision:
+        revision_dir = revision.replace("/", "--")
+        return POLICY_CACHE_DIR / repo_dir / revision_dir / filename
     return POLICY_CACHE_DIR / repo_dir / filename
 
 
-def _download_policy(repo_id: str, filename: str, destination: Path) -> Path:
+def _download_policy(
+    repo_id: str,
+    filename: str,
+    destination: Path,
+    revision: str | None = None,
+) -> Path:
     if destination.exists():
         return destination
 
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        from huggingface_sb3 import load_from_hub
+        from huggingface_hub import hf_hub_download
     except ImportError as exc:  # pragma: no cover - depends on optional install
         raise RuntimeError(
-            "SB3 policy download requires huggingface-sb3. "
-            "Install huggingface-sb3 to use --agent sb3."
+            "SB3 policy download requires huggingface-hub. "
+            "Install huggingface-hub to use --agent sb3."
         ) from exc
 
-    downloaded_path = Path(load_from_hub(repo_id=repo_id, filename=filename))
+    downloaded_path = Path(
+        hf_hub_download(repo_id=repo_id, filename=filename, revision=revision)
+    )
     if downloaded_path.resolve() != destination.resolve():
         shutil.copy2(downloaded_path, destination)
 
@@ -170,7 +184,8 @@ def load_sb3_policy(
     filename: str,
     *,
     trusted_repo_prefixes: Sequence[str] | None = None,
-    enforce_trusted_repo: bool = False,
+    enforce_trusted_repo: bool = True,
+    revision: str | None = None,
     algorithm: str | None = None,
     device: str = "cpu",
 ) -> Policy:
@@ -190,11 +205,16 @@ def load_sb3_policy(
             raise ValueError(message % (repo_id, trusted_prefixes))
         logger.warning(message, repo_id, trusted_prefixes)
 
-    cache_path = _resolve_cached_policy_path(repo_id=repo_id, filename=filename)
+    cache_path = _resolve_cached_policy_path(
+        repo_id=repo_id,
+        filename=filename,
+        revision=revision,
+    )
     model_path = _download_policy(
         repo_id=repo_id,
         filename=filename,
         destination=cache_path,
+        revision=revision,
     )
     return _load_policy_from_path(
         filename=filename,
@@ -227,7 +247,8 @@ def run_smoketest(
     sb3_repo_id: str | None = None,
     sb3_filename: str | None = None,
     trusted_repo_prefixes: Sequence[str] | None = None,
-    enforce_trusted_repo: bool = False,
+    enforce_trusted_repo: bool = True,
+    sb3_revision: str | None = None,
     sb3_algorithm: str | None = None,
     sb3_device: str = "cpu",
 ) -> list[Path]:
@@ -252,6 +273,7 @@ def run_smoketest(
             filename=sb3_filename,
             trusted_repo_prefixes=trusted_repo_prefixes,
             enforce_trusted_repo=enforce_trusted_repo,
+            revision=sb3_revision,
             algorithm=sb3_algorithm,
             device=sb3_device,
         )

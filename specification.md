@@ -130,15 +130,11 @@ uv pip install --index-url https://download.pytorch.org/whl/cu124 \
 ### Python packages
 
 ```bash
-uv pip install \
-    "gymnasium[atari,box2d,classic-control,other]>=1.2,<2.0" \
-    "ale-py>=0.11" \
-    "stable-baselines3>=2.3" "huggingface_sb3>=3.0" "rl_zoo3>=2.3" \
-    "vllm>=0.10" \
-    "kokoro>=0.9" "soundfile" "sounddevice" \
-    "pygame>=2.6" \
-    "pydantic>=2" "pydantic-settings>=2" "typer[all]" "httpx" "pyyaml"
+uv sync --extra voice --extra vlm
 ```
+
+Use the project extras instead of ad-hoc package installs so optional runtime
+dependencies remain resolved through `uv.lock` and hash-exported requirements.
 
 ### ROM note
 

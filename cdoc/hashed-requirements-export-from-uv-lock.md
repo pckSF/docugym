@@ -2,9 +2,9 @@
 type: decision
 tags: [security, supply-chain, dependencies, uv, docker]
 created: 2026-04-22
-updated: 2026-04-22
+updated: 2026-05-07
 status: active
-related: [security-audit-and-risk-register.md]
+related: [security-audit-and-risk-register.md, 2026-05-07-application-security-audit.md]
 ---
 
 # Hashed Requirements Export From uv.lock
@@ -84,10 +84,26 @@ Option 3 is chosen.
 
 `requirements.txt` is now generated from `uv.lock` using:
 
-`uv export --format requirements.txt --group dev --no-emit-project --locked --output-file requirements.txt`
+`uv export --format requirements.txt --all-extras --group dev --no-emit-project --locked --output-file requirements.txt`
 
 This approach closes the non-hash dependency-install gap in Docker while
 preserving current build semantics and dev dependency availability.
+
+### 2026-05-07 Update
+
+The application security audit found that optional voice and VLM runtime
+dependencies were still being installed through ad-hoc commands outside the
+hash-pinned artifact. The export command now includes `--all-extras`, and
+`pyproject.toml` declares:
+
+- `voice`: `kokoro`, `sounddevice`, and `soundfile`.
+- `vlm`: `vllm`.
+
+The README and specification now point users to `uv sync --extra voice --extra
+vlm` for the full local runtime. Subtitle-only workflows can still use plain
+`uv sync`. The hash-pinned export intentionally grows to include the optional
+VLM dependency tree so Docker/audit-style install paths can inspect the same
+optional supply-chain surface.
 
 ## Pre-Mortem
 
@@ -102,8 +118,18 @@ preserving current build semantics and dev dependency availability.
 - Dev-group expectations shift and export contents change unexpectedly.
   - Mitigation: keep explicit group flag in the generation command and monitor
     diffs.
+- Optional extras add large transitive dependency trees, especially VLM runtime
+  packages.
+  - Mitigation: keep `--all-extras` explicit in the command and review the
+    generated lock/export churn as a security-relevant change.
+- Fresh temp exports differ from `requirements.txt` because uv records the
+  output file path in the generated header.
+  - Mitigation: compare dependency bodies when validating temp exports, while CI
+    should continue writing to `requirements.txt` so the header matches.
 
 ## Changelog
 
 - 2026-04-22: Created decision and moved `requirements.txt` to hash-pinned,
   lock-derived export with `--no-emit-project`.
+- 2026-05-07: Updated export semantics to include `--all-extras` after adding
+  voice/VLM optional dependencies to the locked and hash-pinned artifact.

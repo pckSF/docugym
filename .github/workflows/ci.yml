@@ -30,7 +30,7 @@ jobs:
 
       - name: Verify requirements export is up to date
         run: |
-          uv export --format requirements.txt --group dev --no-emit-project --locked --output-file requirements.txt
+          uv export --format requirements.txt --all-extras --group dev --no-emit-project --locked --output-file requirements.txt
           git diff --exit-code -- requirements.txt
 
       - name: Ruff check

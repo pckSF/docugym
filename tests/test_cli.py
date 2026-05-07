@@ -18,10 +18,12 @@ run:
   env_kwargs:
     frameskip: 2
   seed: 17
-agent:
-  kind: "sb3"
-  sb3_repo_id: "sb3/ppo-LunarLander-v2"
-  sb3_filename: "ppo-LunarLander-v2.zip"
+agent: {
+kind: "sb3",
+sb3_repo_id: "sb3/ppo-LunarLander-v2",
+sb3_filename: "ppo-LunarLander-v2.zip",
+sb3_revision: "0961e4e83c29ec7dd52be7dd08f7c045cb23bda3"
+}
 """,
         encoding="utf-8",
     )
@@ -61,6 +63,7 @@ agent:
     assert captured["agent_kind"] == "random"
     assert captured["sb3_repo_id"] == "sb3/ppo-LunarLander-v2"
     assert captured["sb3_filename"] == "ppo-LunarLander-v2.zip"
+    assert captured["sb3_revision"] == "0961e4e83c29ec7dd52be7dd08f7c045cb23bda3"
     assert captured["env_kwargs"] == {
         "frameskip": 2,
         "repeat_action_probability": 0.1,
@@ -329,10 +332,12 @@ run:
     frameskip: 4
   seed: 21
   fps: 60
-agent:
-  kind: "random"
-  sb3_repo_id: "sb3/ppo-SpaceInvadersNoFrameskip-v4"
-  sb3_filename: "ppo-SpaceInvadersNoFrameskip-v4.zip"
+agent: {
+kind: "random",
+sb3_repo_id: "sb3/ppo-SpaceInvadersNoFrameskip-v4",
+sb3_filename: "ppo-SpaceInvadersNoFrameskip-v4.zip",
+sb3_revision: "c0741d2e949614ef905e2489241c3032d1c9cce3"
+}
 vlm:
   base_url: "http://localhost:8000/v1"
   model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
@@ -406,6 +411,7 @@ display:
     assert isinstance(interval_seconds, float)
     assert abs(interval_seconds - (5.0 / 60.0)) < 1e-9
     assert captured["agent_kind"] == "random"
+    assert captured["sb3_revision"] == "c0741d2e949614ef905e2489241c3032d1c9cce3"
     assert captured["env_kwargs"] == {
         "frameskip": 4,
         "repeat_action_probability": 0.1,
@@ -474,6 +480,7 @@ vlm:
     assert captured["agent_kind"] == "sb3"
     assert captured["sb3_repo_id"] == "sb3/ppo-PongNoFrameskip-v4"
     assert captured["sb3_filename"] == "ppo-PongNoFrameskip-v4.zip"
+    assert captured["sb3_revision"] is None
 
 
 def test_run_no_voice_flag_enables_subtitle_only_mode(
@@ -714,10 +721,12 @@ run:
   env_kwargs:
     frameskip: 2
   seed: 17
-agent:
-  kind: "random"
-  sb3_repo_id: "sb3/ppo-LunarLander-v2"
-  sb3_filename: "ppo-LunarLander-v2.zip"
+agent: {
+kind: "random",
+sb3_repo_id: "sb3/ppo-LunarLander-v2",
+sb3_filename: "ppo-LunarLander-v2.zip",
+sb3_revision: "0961e4e83c29ec7dd52be7dd08f7c045cb23bda3"
+}
 vlm:
   base_url: "http://localhost:8000/v1"
   model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
@@ -785,6 +794,7 @@ vlm:
     assert captured["step_stride"] == 2
     assert captured["agent_kind"] == "random"
     assert captured["seed"] == 17
+    assert captured["sb3_revision"] == "0961e4e83c29ec7dd52be7dd08f7c045cb23bda3"
     assert captured["wait_kwargs"] == {"timeout_seconds": 4.0}
     assert captured["env_kwargs"] == {
         "frameskip": 2,

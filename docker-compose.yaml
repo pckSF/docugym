@@ -12,6 +12,10 @@ services:
     environment:
       UV_PROJECT_ENVIRONMENT: /home/devuser/.venv
     shm_size: "2gb"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       - .:/app
     working_dir: /app
@@ -36,6 +40,10 @@ services:
     environment:
       UV_PROJECT_ENVIRONMENT: /home/devuser/.venv
     shm_size: "2gb"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       - .:/app
     working_dir: /app
