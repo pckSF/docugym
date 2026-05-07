@@ -95,7 +95,7 @@ class VLMNarrator:
         return normalized or "A pause. The creature gathers itself."
 
     def narrate_frame_sync(self, frame: np.ndarray, context: NarrationContext) -> str:
-        """Synchronous wrapper used by Stage 4 single-loop integration."""
+        """Synchronous wrapper for callers that are not running an event loop."""
 
         try:
             asyncio.get_running_loop()

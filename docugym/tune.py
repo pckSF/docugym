@@ -19,7 +19,7 @@ class SyncNarrator(Protocol):
 
 @dataclass(slots=True)
 class PromptTuningSample:
-    """One narrated sample emitted by the Stage 10 prompt tuning command."""
+    """One narrated sample emitted by the prompt tuning command."""
 
     step: int
     reward: float
@@ -79,6 +79,8 @@ def run_prompt_tuning(
     if agent_kind == "scripted":
         scripted_agent = ScriptedAgent(env_id=env_id, fallback=random_agent)
     elif agent_kind == "sb3":
+        if sb3_repo_id is None or sb3_filename is None:
+            raise ValueError("sb3_repo_id and sb3_filename are required for SB3 agent")
         policy = load_sb3_policy(
             repo_id=sb3_repo_id,
             filename=sb3_filename,
@@ -119,7 +121,9 @@ def run_prompt_tuning(
             context = NarrationContext(
                 env_human_name=_humanize_env_id(env_id),
                 previous_narration=previous_narration,
-                event_summary=f"episode step {rendered_step}; reward {float(reward):+.2f}",
+                event_summary=(
+                    f"episode step {rendered_step}; reward {float(reward):+.2f}"
+                ),
             )
 
             started = perf_counter()

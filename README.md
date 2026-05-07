@@ -8,9 +8,9 @@ with local inference for both vision-language narration and text-to-speech.
 The long-term goal is a smooth, game-window-first viewing experience where narration
 lags gameplay by about one to two seconds but still feels synchronized and informative.
 
-## Quickstart (Stage 8)
+## Quickstart
 
-1. Install ffmpeg (required for optional Stage 9 recording):
+1. Install ffmpeg (required for optional recording):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -50,23 +50,23 @@ docugym run \
 	--wait-for-vlm
 ```
 
-7. Record a narrated run to MP4 (optional Stage 9):
+7. Record a narrated run to MP4 (optional):
 
 ```bash
 docugym run --config configs/atari.yaml --record out/session.mp4 --wait-for-vlm
 ```
 
-The `run` command renders the live PyGame window, keeps gameplay smooth with the
-Stage 6 async pipeline, and updates subtitles from narration text returned by the
-local OpenAI-compatible VLM endpoint.
+The `run` command renders the live PyGame window, keeps gameplay smooth with an
+async pipeline, and updates subtitles from narration text returned by the local
+OpenAI-compatible VLM endpoint.
 
 ## Presets and Discovery Commands
 
-- `docugym list-envs`: show supported Stage 8 preset configs and their effective env/policy.
+- `docugym list-envs`: show supported preset configs and their effective env/policy.
 - `docugym list-voices`: show Kokoro's 8 British voices and sample lines.
 - `docugym run --config configs/carracing.yaml`: start from a Box2D preset.
 
-## Stage 10 Tuning and Eval
+## Tuning and Eval
 
 Use prompt tuning to run narrations over varied frames and compare style changes:
 

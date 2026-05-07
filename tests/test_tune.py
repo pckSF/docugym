@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
 
-from docugym.narrator import NarrationContext
 from docugym.tune import PromptTuningSample, run_prompt_tuning
+
+if TYPE_CHECKING:
+    from docugym.narrator import NarrationContext
 
 
 class DummyActionSpace:
@@ -25,7 +29,9 @@ class DummyEnv:
         del seed
         return np.array([0.0], dtype=np.float32), {}
 
-    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict[str, object]]:
+    def step(
+        self, action: int
+    ) -> tuple[np.ndarray, float, bool, bool, dict[str, object]]:
         del action
         self.step_count += 1
         terminated = self.step_count % 5 == 0

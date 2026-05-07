@@ -4,7 +4,7 @@ tags: [stage-10, tuning, evaluation, prompt, cli, readme]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-8-packaging-cli-and-readme.md, stage-9-mp4-recording.md, stage-6-async-orchestration-and-keyframe-selection.md]
+related: [stage-8-packaging-cli-and-readme.md, stage-9-mp4-recording.md, stage-6-async-orchestration-and-keyframe-selection.md, final-setup-runtime-and-naming-consolidation.md]
 ---
 
 # Stage 10 Tuning and Eval
@@ -130,3 +130,5 @@ without flattening top-level command discoverability.
 
 - 2026-05-07: Created Stage 10 decision note documenting tuning command design,
   implementation strategy, and evaluation guidance tradeoffs.
+- 2026-05-07: Linked final setup consolidation decision note for stage-neutral
+  active runtime naming.

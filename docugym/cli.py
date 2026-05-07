@@ -14,7 +14,7 @@ from docugym.display import run_display_smoketest
 from docugym.env import run_smoketest
 from docugym.logging_config import configure_logging
 from docugym.narrator import VLMNarrator
-from docugym.runtime import run_stage6_session_sync
+from docugym.runtime import run_session_sync
 from docugym.tune import run_prompt_tuning
 
 app = typer.Typer(
@@ -65,7 +65,7 @@ _KOKORO_BRITISH_VOICE_SAMPLES: tuple[tuple[str, str], ...] = (
     ),
 )
 
-_STAGE8_PRESET_NAMES: tuple[str, ...] = ("atari", "lunarlander", "carracing")
+_PRESET_NAMES: tuple[str, ...] = ("atari", "lunarlander", "carracing")
 
 
 @dataclass(slots=True)
@@ -147,13 +147,13 @@ def list_voices() -> None:
 
 @app.command("list-envs")
 def list_envs() -> None:
-    """Print Stage 8 environment presets shipped in configs/."""
+    """Print environment presets shipped in configs/."""
 
     config_dir = Path("configs")
     typer.echo("Supported env presets:")
 
     found = False
-    for preset_name in _STAGE8_PRESET_NAMES:
+    for preset_name in _PRESET_NAMES:
         preset_path = config_dir / f"{preset_name}.yaml"
         if not preset_path.exists():
             continue
@@ -167,7 +167,7 @@ def list_envs() -> None:
         found = True
 
     if not found:
-        typer.echo("- no Stage 8 presets found in configs/")
+        typer.echo("- no presets found in configs/")
 
 
 @app.command("smoketest")
@@ -209,7 +209,7 @@ def smoketest(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Run a local Stage 2 smoke test and persist rendered frames to disk."""
+    """Run a local smoke test and persist rendered frames to disk."""
 
     state = _get_state(ctx)
     config = state.settings
@@ -270,7 +270,7 @@ def display_smoketest(
     ),
     subtitle: str = typer.Option(
         "In this pixelated arena, every ricochet tells a survival story.",
-        help="Subtitle text rendered over gameplay during Stage 3 display testing.",
+        help="Subtitle text rendered over gameplay during live display testing.",
     ),
     hud: bool | None = typer.Option(
         None,
@@ -296,7 +296,7 @@ def display_smoketest(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Run the Stage 3 live display loop with a random agent."""
+    """Run the live display loop with a random agent."""
 
     state = _get_state(ctx)
     config = state.settings
@@ -461,7 +461,7 @@ def run(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Run Stage 6 async narration pipeline with keyframe selection."""
+    """Run the async narration pipeline with keyframe selection."""
 
     state = _get_state(ctx)
     config = state.settings
@@ -534,7 +534,7 @@ def run(
             )
             raise typer.Exit(code=1)
 
-    result = run_stage6_session_sync(
+    result = run_session_sync(
         env_id=env_id,
         seed=effective_seed,
         fps=effective_fps,
@@ -648,7 +648,7 @@ def tune_prompt(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Generate multiple narrations over varied frames for Stage 10 prompt tuning."""
+    """Generate multiple narrations over varied frames for prompt tuning."""
 
     state = _get_state(ctx)
     config = state.settings

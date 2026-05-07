@@ -183,7 +183,7 @@ def test_build_status_text_includes_runtime_indicators() -> None:
     assert "audio: muted" in status
 
 
-def test_key_to_action_maps_stage7_shortcuts() -> None:
+def test_key_to_action_maps_runtime_shortcuts() -> None:
     assert Display._key_to_action(32) == "toggle_pause"
     assert Display._key_to_action(110) == "force_narrate"
     assert Display._key_to_action(109) == "toggle_mute"

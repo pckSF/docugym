@@ -4,7 +4,7 @@ tags: [stage-8, cli, presets, readme, packaging]
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [stage-7-ui-polish-and-keyboard-controls.md, stage-9-mp4-recording.md]
+related: [stage-7-ui-polish-and-keyboard-controls.md, stage-9-mp4-recording.md, final-setup-runtime-and-naming-consolidation.md]
 ---
 
 # Stage 8 Packaging, CLI, and README
@@ -118,3 +118,5 @@ it avoids unnecessary refactor risk while still adding test coverage.
   decision rationale, and pre-mortem.
 - 2026-05-07: Linked Stage 9 recording decision note for optional MP4 capture
   workflow and CLI/config integration.
+- 2026-05-07: Linked final setup consolidation decision note for stage-neutral
+  runtime naming and active README terminology.

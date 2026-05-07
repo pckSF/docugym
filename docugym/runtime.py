@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class Stage4RunResult:
+class RunResult:
     """Aggregated metrics from a narration run."""
 
     rendered_steps: int
@@ -78,7 +78,7 @@ class _NarrationCandidate:
 
 @runtime_checkable
 class AsyncNarratorClient(Protocol):
-    """Async narrator contract used by the Stage 6 pipeline."""
+    """Async narrator contract used by the runtime pipeline."""
 
     async def narrate_frame(self, frame: np.ndarray, context: NarrationContext) -> str:
         """Return narration text for a selected keyframe."""
@@ -86,7 +86,7 @@ class AsyncNarratorClient(Protocol):
 
 @runtime_checkable
 class AsyncSpeakerClient(Protocol):
-    """Async speaker interface used by the Stage 6 pipeline."""
+    """Async speaker interface used by the runtime pipeline."""
 
     def speak(self, text: str) -> AsyncIterator[SpeechSentence]:
         """Yield sentence-level speech outputs for a narration text."""
@@ -94,7 +94,7 @@ class AsyncSpeakerClient(Protocol):
 
 @runtime_checkable
 class NarratorClient(Protocol):
-    """Structural narrator type used by the Stage 4 synchronous runtime loop."""
+    """Structural narrator type for synchronous narration clients."""
 
     def narrate_frame_sync(self, frame: np.ndarray, context: NarrationContext) -> str:
         """Return narration text for a given frame and context."""
@@ -131,7 +131,7 @@ class AudioOutputClient(Protocol):
 
 @runtime_checkable
 class SessionRecorderClient(Protocol):
-    """Recorder sink contract used by Stage 9 runtime integration."""
+    """Recorder sink contract used by runtime recording integration."""
 
     def write_video_frame(self, frame: np.ndarray) -> None:
         """Append one rendered frame to the recording stream."""
@@ -141,223 +141,6 @@ class SessionRecorderClient(Protocol):
 
     def close(self, *, end_timestamp: float) -> Path | None:
         """Finalize recording artifacts and return saved output path."""
-
-
-def run_stage4_session(
-    *,
-    env_id: str,
-    seed: int,
-    fps: int,
-    window_scale: int,
-    subtitle_font: str,
-    subtitle_size: int,
-    subtitle_max_text_width: int,
-    hud: bool,
-    text_bands: bool,
-    min_window_width: int,
-    env_kwargs: dict[str, Any] | None,
-    narrator: NarratorClient,
-    narrate_every: int,
-    agent_kind: Literal["random", "scripted", "sb3"],
-    sb3_repo_id: str | None,
-    sb3_filename: str | None,
-    trusted_repo_prefixes: list[str] | tuple[str, ...] = (
-        DEFAULT_TRUSTED_SB3_REPO_PREFIXES
-    ),
-    enforce_trusted_repo: bool = False,
-    voice_enabled: bool = False,
-    tts_engine: Literal["kokoro", "xtts", "chatterbox"] = "kokoro",
-    tts_voice: str = "bm_george",
-    tts_speed: float = 0.95,
-    tts_sample_rate: int = 24_000,
-    speaker: SpeakerClient | None = None,
-    audio_output: AudioOutputClient | None = None,
-    max_steps: int | None = None,
-    on_narration: Callable[[str, int, float], None] | None = None,
-) -> Stage4RunResult:
-    """Run gameplay + display, narrating synchronously every N frames."""
-
-    if narrate_every <= 0:
-        raise ValueError("narrate_every must be a positive integer")
-    if max_steps is not None and max_steps <= 0:
-        raise ValueError("max_steps must be a positive integer when provided")
-
-    env = make_env(env_id=env_id, seed=seed, env_kwargs=env_kwargs)
-    display = Display(
-        env_id=env_id,
-        fps=fps,
-        window_scale=window_scale,
-        subtitle_font=subtitle_font,
-        subtitle_size=subtitle_size,
-        subtitle_max_text_width=subtitle_max_text_width,
-        hud=hud,
-        text_bands=text_bands,
-        min_window_width=min_window_width,
-    )
-
-    random_agent = RandomAgent(env)
-    scripted_agent = ScriptedAgent(env_id=env_id, fallback=random_agent)
-    policy = None
-    policy_disabled = False
-    active_speaker = speaker
-    active_audio_output = audio_output
-    tts_active = voice_enabled
-
-    if agent_kind == "sb3":
-        if sb3_repo_id is None or sb3_filename is None:
-            raise ValueError("sb3_repo_id and sb3_filename are required for SB3 agent")
-        policy = load_sb3_policy(
-            repo_id=sb3_repo_id,
-            filename=sb3_filename,
-            trusted_repo_prefixes=trusted_repo_prefixes,
-            enforce_trusted_repo=enforce_trusted_repo,
-        )
-
-    if voice_enabled:
-        try:
-            if tts_engine != "kokoro":
-                raise ValueError(
-                    "Only 'kokoro' tts_engine is currently supported in Stage 5"
-                )
-
-            if active_audio_output is None:
-                from docugym.audio import AudioOutput
-
-                active_audio_output = AudioOutput(sample_rate=tts_sample_rate)
-
-            if active_speaker is None:
-                from docugym.tts import KokoroTTS
-
-                active_speaker = KokoroTTS(
-                    voice=tts_voice,
-                    speed=tts_speed,
-                    sample_rate=tts_sample_rate,
-                )
-
-            active_audio_output.start()
-        except Exception as exc:
-            logger.warning(
-                "Voice mode unavailable; continuing subtitle-only narration: %s",
-                exc,
-            )
-            tts_active = False
-
-    step = 0
-    episode_reward = 0.0
-    last_narration = ""
-    latency_samples_ms: list[float] = []
-    narration_count = 0
-
-    try:
-        observation, _ = env.reset(seed=seed)
-        display.set_subtitle("A pause. The creature gathers itself.")
-
-        while display.is_open:
-            if policy is not None and not policy_disabled:
-                try:
-                    action, _ = policy.predict(observation, deterministic=True)
-                except Exception as exc:  # pragma: no cover - depends on model/runtime
-                    logger.warning(
-                        "SB3 policy prediction failed, "
-                        "falling back to random actions: %s",
-                        exc,
-                    )
-                    policy_disabled = True
-                    action = random_agent.act(observation)
-            elif agent_kind == "scripted":
-                action = scripted_agent.act(observation)
-            else:
-                action = random_agent.act(observation)
-
-            observation, reward, terminated, truncated, _ = env.step(action)
-            episode_reward += float(reward)
-            frame = env.render()
-
-            if not isinstance(frame, np.ndarray):
-                raise TypeError(
-                    "Expected render_mode='rgb_array' to return numpy.ndarray, "
-                    f"got {type(frame)!r}"
-                )
-
-            step += 1
-
-            if step % narrate_every == 0:
-                context = NarrationContext(
-                    env_human_name=_env_human_name(env_id),
-                    previous_narration=last_narration,
-                    event_summary=(
-                        f"episode step {step}; reward {float(reward):+.2f}; "
-                        f"episode reward {episode_reward:+.2f}"
-                    ),
-                )
-
-                started = perf_counter()
-                try:
-                    narration = narrator.narrate_frame_sync(
-                        frame=frame, context=context
-                    )
-                except Exception as exc:
-                    logger.warning("Narration request failed at step=%d: %s", step, exc)
-                    narration = "A pause. The creature gathers itself."
-                latency_ms = (perf_counter() - started) * 1000.0
-
-                narration_count += 1
-                latency_samples_ms.append(latency_ms)
-                last_narration = narration
-                display.set_subtitle(narration)
-
-                if (
-                    tts_active
-                    and active_speaker is not None
-                    and active_audio_output is not None
-                ):
-                    try:
-                        for sentence in active_speaker.speak_sync(narration):
-                            subtitle_text = sentence.graphemes.strip()
-                            if subtitle_text:
-                                display.set_subtitle(subtitle_text)
-                            for chunk in sentence.chunks:
-                                active_audio_output.enqueue(chunk)
-                    except Exception as exc:
-                        logger.warning(
-                            "TTS synthesis failed at step=%d; "
-                            "continuing subtitle-only: %s",
-                            step,
-                            exc,
-                        )
-
-                logger.info(
-                    "Narration[%d] step=%d latency_ms=%.1f text=%s",
-                    narration_count,
-                    step,
-                    latency_ms,
-                    narration,
-                )
-                if on_narration is not None:
-                    on_narration(narration, step, latency_ms)
-
-            display.set_status(step=step, episode_reward=episode_reward)
-            if not display.blit_frame(frame):
-                break
-
-            if max_steps is not None and step >= max_steps:
-                break
-
-            if terminated or truncated:
-                observation, _ = env.reset()
-                episode_reward = 0.0
-    finally:
-        if tts_active and active_audio_output is not None:
-            active_audio_output.stop()
-        display.close()
-        env.close()
-
-    return Stage4RunResult(
-        rendered_steps=step,
-        narration_count=narration_count,
-        latency_p50_ms=_percentile(latency_samples_ms, 0.50),
-        latency_p95_ms=_percentile(latency_samples_ms, 0.95),
-    )
 
 
 def _percentile(values: list[float], quantile: float) -> float | None:
@@ -519,7 +302,7 @@ async def _speak_async(
     raise TypeError("Speaker must implement speak or speak_sync")
 
 
-async def run_stage6_session(
+async def run_session(
     *,
     env_id: str,
     seed: int,
@@ -559,8 +342,8 @@ async def run_stage6_session(
     max_steps: int | None = None,
     max_episodes: int | None = None,
     on_narration: Callable[[str, int, float], None] | None = None,
-) -> Stage4RunResult:
-    """Run Stage 6 async orchestration with keyframe selection and backpressure."""
+) -> RunResult:
+    """Run async narration with keyframe selection and queue backpressure."""
 
     if narration_interval_seconds <= 0:
         raise ValueError("narration_interval_seconds must be positive")
@@ -623,9 +406,7 @@ async def run_stage6_session(
     if voice_enabled:
         try:
             if tts_engine != "kokoro":
-                raise ValueError(
-                    "Only 'kokoro' tts_engine is currently supported in Stage 6"
-                )
+                raise ValueError("Only 'kokoro' tts_engine is currently supported")
 
             if active_audio_output is None:
                 from docugym.audio import AudioOutput
@@ -1047,7 +828,7 @@ async def run_stage6_session(
         display.close()
         env.close()
 
-    return Stage4RunResult(
+    return RunResult(
         rendered_steps=rendered_steps,
         narration_count=narration_count,
         dropped_narration_candidates=dropped_narration_candidates,
@@ -1056,15 +837,15 @@ async def run_stage6_session(
     )
 
 
-def run_stage6_session_sync(**kwargs: Any) -> Stage4RunResult:
-    """Synchronous wrapper around the async Stage 6 runtime pipeline."""
+def run_session_sync(**kwargs: Any) -> RunResult:
+    """Synchronous wrapper around the async runtime pipeline."""
 
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(run_stage6_session(**kwargs))
+        return asyncio.run(run_session(**kwargs))
 
     raise RuntimeError(
-        "run_stage6_session_sync cannot run from an active event loop; "
-        "await run_stage6_session instead."
+        "run_session_sync cannot run from an active event loop; "
+        "await run_session instead."
     )

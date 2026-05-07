@@ -319,7 +319,7 @@ run:
     assert captured["env_kwargs"] == {}
 
 
-def test_run_command_invokes_stage6_runner(monkeypatch, tmp_path: Path) -> None:
+def test_run_command_invokes_runtime_runner(monkeypatch, tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         """
@@ -369,14 +369,14 @@ display:
         latency_p95_ms = 1200.0
         dropped_narration_candidates = 1
 
-    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
+    def fake_run_session_sync(**kwargs: object) -> FakeResult:
         captured.update(kwargs)
         return FakeResult()
 
     monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
     monkeypatch.setattr(
-        "docugym.cli.run_stage6_session_sync",
-        fake_run_stage6_session_sync,
+        "docugym.cli.run_session_sync",
+        fake_run_session_sync,
     )
 
     runner = CliRunner()
@@ -446,14 +446,14 @@ vlm:
         latency_p95_ms = None
         dropped_narration_candidates = 0
 
-    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
+    def fake_run_session_sync(**kwargs: object) -> FakeResult:
         captured.update(kwargs)
         return FakeResult()
 
     monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
     monkeypatch.setattr(
-        "docugym.cli.run_stage6_session_sync",
-        fake_run_stage6_session_sync,
+        "docugym.cli.run_session_sync",
+        fake_run_session_sync,
     )
 
     runner = CliRunner()
@@ -513,14 +513,14 @@ tts:
         latency_p95_ms = None
         dropped_narration_candidates = 0
 
-    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
+    def fake_run_session_sync(**kwargs: object) -> FakeResult:
         captured.update(kwargs)
         return FakeResult()
 
     monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
     monkeypatch.setattr(
-        "docugym.cli.run_stage6_session_sync",
-        fake_run_stage6_session_sync,
+        "docugym.cli.run_session_sync",
+        fake_run_session_sync,
     )
 
     runner = CliRunner()
@@ -575,14 +575,14 @@ recording:
         latency_p95_ms = None
         dropped_narration_candidates = 0
 
-    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
+    def fake_run_session_sync(**kwargs: object) -> FakeResult:
         captured.update(kwargs)
         return FakeResult()
 
     monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
     monkeypatch.setattr(
-        "docugym.cli.run_stage6_session_sync",
-        fake_run_stage6_session_sync,
+        "docugym.cli.run_session_sync",
+        fake_run_session_sync,
     )
 
     out_path = tmp_path / "manual-record.mp4"
@@ -642,14 +642,14 @@ recording:
         latency_p95_ms = None
         dropped_narration_candidates = 0
 
-    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
+    def fake_run_session_sync(**kwargs: object) -> FakeResult:
         captured.update(kwargs)
         return FakeResult()
 
     monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
     monkeypatch.setattr(
-        "docugym.cli.run_stage6_session_sync",
-        fake_run_stage6_session_sync,
+        "docugym.cli.run_session_sync",
+        fake_run_session_sync,
     )
 
     runner = CliRunner()
@@ -668,7 +668,7 @@ recording:
     assert captured["record_out_path"] == Path("out/from-config.mp4")
 
 
-def test_list_voices_prints_all_stage8_kokoro_voices(tmp_path: Path) -> None:
+def test_list_voices_prints_all_kokoro_voices(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
     config_path.write_text('run:\n  env_id: "CartPole-v1"\n', encoding="utf-8")
 
@@ -689,7 +689,7 @@ def test_list_voices_prints_all_stage8_kokoro_voices(tmp_path: Path) -> None:
         assert voice_id in result.output
 
 
-def test_list_envs_prints_stage8_presets(tmp_path: Path) -> None:
+def test_list_envs_prints_presets(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
     config_path.write_text('run:\n  env_id: "CartPole-v1"\n', encoding="utf-8")
 

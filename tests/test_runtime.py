@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import numpy as np
 
-from docugym.runtime import SpeechSentence, run_stage4_session, run_stage6_session_sync
+from docugym.runtime import SpeechSentence, run_session_sync
 
 
 class DummyActionSpace:
@@ -101,15 +101,6 @@ class FakeInteractiveDisplay(FakeDisplay):
         self.narrating_states.append(active)
 
 
-class FakeNarrator:
-    def __init__(self) -> None:
-        self.calls: list[tuple[tuple[int, int, int], str]] = []
-
-    def narrate_frame_sync(self, frame: np.ndarray, context: Any) -> str:
-        self.calls.append((frame.shape, context.event_summary))
-        return "The patient traveller drifts onward."
-
-
 class FakeSpeakerSentence:
     def __init__(self, graphemes: str, chunks: list[np.ndarray]) -> None:
         self.graphemes = graphemes
@@ -181,113 +172,7 @@ class AsyncFakeNarrator:
         return "The patient traveller drifts onward."
 
 
-def test_run_stage4_session_narrates_on_fixed_cadence(monkeypatch) -> None:
-    env = DummyEnv()
-    displays: list[FakeDisplay] = []
-
-    def fake_make_env(**_kwargs: Any) -> DummyEnv:
-        return env
-
-    def fake_display(**kwargs: Any) -> FakeDisplay:
-        instance = FakeDisplay(**kwargs)
-        displays.append(instance)
-        return instance
-
-    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
-    monkeypatch.setattr("docugym.runtime.Display", fake_display)
-
-    narrator = FakeNarrator()
-
-    result = run_stage4_session(
-        env_id="ALE/Pong-v5",
-        seed=5,
-        fps=60,
-        window_scale=3,
-        subtitle_font="DejaVu Sans",
-        subtitle_size=22,
-        subtitle_max_text_width=960,
-        hud=True,
-        text_bands=True,
-        min_window_width=960,
-        env_kwargs={},
-        narrator=narrator,
-        narrate_every=2,
-        agent_kind="random",
-        sb3_repo_id=None,
-        sb3_filename=None,
-        max_steps=5,
-    )
-
-    display = displays[0]
-
-    assert result.rendered_steps == 5
-    assert result.narration_count == 2
-    assert result.latency_p50_ms is not None
-    assert result.latency_p95_ms is not None
-    assert len(narrator.calls) == 2
-    assert env.closed is True
-    assert display.closed is True
-    assert display.status_updates[0] == (1, 1.0)
-    assert display.subtitles[0] == "A pause. The creature gathers itself."
-
-
-def test_run_stage4_session_queues_tts_audio_when_voice_enabled(monkeypatch) -> None:
-    env = DummyEnv()
-    displays: list[FakeDisplay] = []
-
-    def fake_make_env(**_kwargs: Any) -> DummyEnv:
-        return env
-
-    def fake_display(**kwargs: Any) -> FakeDisplay:
-        instance = FakeDisplay(**kwargs)
-        displays.append(instance)
-        return instance
-
-    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
-    monkeypatch.setattr("docugym.runtime.Display", fake_display)
-
-    narrator = FakeNarrator()
-    speaker = FakeSpeaker()
-    audio_output = FakeAudioOutput()
-
-    result = run_stage4_session(
-        env_id="ALE/Pong-v5",
-        seed=5,
-        fps=60,
-        window_scale=3,
-        subtitle_font="DejaVu Sans",
-        subtitle_size=22,
-        subtitle_max_text_width=960,
-        hud=True,
-        text_bands=True,
-        min_window_width=960,
-        env_kwargs={},
-        narrator=narrator,
-        narrate_every=2,
-        agent_kind="random",
-        sb3_repo_id=None,
-        sb3_filename=None,
-        voice_enabled=True,
-        speaker=speaker,
-        audio_output=audio_output,
-        max_steps=4,
-    )
-
-    display = displays[0]
-
-    assert result.rendered_steps == 4
-    assert result.narration_count == 2
-    assert audio_output.started is True
-    assert audio_output.stopped is True
-    assert len(audio_output.chunks) == 2
-    assert speaker.calls == [
-        "The patient traveller drifts onward.",
-        "The patient traveller drifts onward.",
-    ]
-    assert "The patient traveller drifts onward." in display.subtitles
-
-
-def test_run_stage6_session_narrates_on_reward_spikes(monkeypatch) -> None:
+def test_run_session_narrates_on_reward_spikes(monkeypatch) -> None:
     env = DummyEnv()
     displays: list[FakeDisplay] = []
 
@@ -303,7 +188,7 @@ def test_run_stage6_session_narrates_on_reward_spikes(monkeypatch) -> None:
     monkeypatch.setattr("docugym.runtime.Display", fake_display)
 
     narrator = AsyncFakeNarrator()
-    result = run_stage6_session_sync(
+    result = run_session_sync(
         env_id="ALE/Pong-v5",
         seed=5,
         fps=60,
@@ -338,7 +223,7 @@ def test_run_stage6_session_narrates_on_reward_spikes(monkeypatch) -> None:
     assert display.closed is True
 
 
-def test_run_stage6_session_drops_stale_candidates_under_backpressure(
+def test_run_session_drops_stale_candidates_under_backpressure(
     monkeypatch,
 ) -> None:
     env = DummyEnv()
@@ -353,7 +238,7 @@ def test_run_stage6_session_drops_stale_candidates_under_backpressure(
     monkeypatch.setattr("docugym.runtime.Display", fake_display)
 
     slow_narrator = AsyncFakeNarrator(delay_seconds=0.01)
-    result = run_stage6_session_sync(
+    result = run_session_sync(
         env_id="ALE/Pong-v5",
         seed=5,
         fps=240,
@@ -384,7 +269,7 @@ def test_run_stage6_session_drops_stale_candidates_under_backpressure(
     assert result.dropped_narration_candidates >= 1
 
 
-def test_run_stage6_session_force_narrate_shortcut(monkeypatch) -> None:
+def test_run_session_force_narrate_shortcut(monkeypatch) -> None:
     env = DummyEnv()
     displays: list[FakeInteractiveDisplay] = []
 
@@ -403,7 +288,7 @@ def test_run_stage6_session_force_narrate_shortcut(monkeypatch) -> None:
     monkeypatch.setattr("docugym.runtime.Display", fake_display)
 
     narrator = AsyncFakeNarrator()
-    result = run_stage6_session_sync(
+    result = run_session_sync(
         env_id="ALE/Pong-v5",
         seed=5,
         fps=60,
@@ -435,7 +320,7 @@ def test_run_stage6_session_force_narrate_shortcut(monkeypatch) -> None:
     assert display.closed is True
 
 
-def test_run_stage6_session_shortcuts_mute_and_save_clip(monkeypatch) -> None:
+def test_run_session_shortcuts_mute_and_save_clip(monkeypatch) -> None:
     env = DummyEnv()
     displays: list[FakeInteractiveDisplay] = []
     saved_calls: list[tuple[int, str]] = []
@@ -470,7 +355,7 @@ def test_run_stage6_session_shortcuts_mute_and_save_clip(monkeypatch) -> None:
     speaker = FakeSpeaker()
     audio_output = FakeAudioOutput()
 
-    result = run_stage6_session_sync(
+    result = run_session_sync(
         env_id="ALE/Pong-v5",
         seed=5,
         fps=60,
@@ -508,7 +393,7 @@ def test_run_stage6_session_shortcuts_mute_and_save_clip(monkeypatch) -> None:
     assert True in display.muted_states
 
 
-def test_run_stage6_session_records_frames_and_audio(monkeypatch) -> None:
+def test_run_session_records_frames_and_audio(monkeypatch) -> None:
     env = DummyEnv()
 
     def fake_make_env(**_kwargs: Any) -> DummyEnv:
@@ -525,7 +410,7 @@ def test_run_stage6_session_records_frames_and_audio(monkeypatch) -> None:
     audio_output = FakeAudioOutput()
     recorder = FakeRecorder()
 
-    result = run_stage6_session_sync(
+    result = run_session_sync(
         env_id="ALE/Pong-v5",
         seed=5,
         fps=60,
@@ -561,7 +446,7 @@ def test_run_stage6_session_records_frames_and_audio(monkeypatch) -> None:
     assert recorder.closed_at is not None
 
 
-def test_run_stage6_session_builds_ffmpeg_recorder_from_output_path(
+def test_run_session_builds_ffmpeg_recorder_from_output_path(
     monkeypatch,
 ) -> None:
     env = DummyEnv()
@@ -601,7 +486,7 @@ def test_run_stage6_session_builds_ffmpeg_recorder_from_output_path(
 
     narrator = AsyncFakeNarrator()
 
-    result = run_stage6_session_sync(
+    result = run_session_sync(
         env_id="ALE/Pong-v5",
         seed=5,
         fps=45,
@@ -624,13 +509,13 @@ def test_run_stage6_session_builds_ffmpeg_recorder_from_output_path(
         sb3_repo_id=None,
         sb3_filename=None,
         voice_enabled=False,
-        record_out_path=Path("out/stage9-test.mp4"),
+        record_out_path=Path("out/session-test.mp4"),
         max_steps=3,
     )
 
     assert result.rendered_steps == 3
     assert created == {
-        "out_path": Path("out/stage9-test.mp4"),
+        "out_path": Path("out/session-test.mp4"),
         "fps": 45,
         "sample_rate": 24000,
         "ffmpeg_binary": "ffmpeg",
