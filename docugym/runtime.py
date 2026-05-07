@@ -29,6 +29,12 @@ from docugym.env import (
     make_env,
 )
 from docugym.keyframes import KeyframeSelector
+from docugym.narration_events import (
+    format_event_summary,
+    humanize_env_id,
+    join_previous_narrations,
+    join_recent_events,
+)
 from docugym.narrator import NarrationContext
 
 logger = logging.getLogger(__name__)
@@ -161,10 +167,6 @@ def _percentile(values: list[float], quantile: float) -> float | None:
     lower_weight = upper - rank
     upper_weight = rank - lower
     return ordered[lower] * lower_weight + ordered[upper] * upper_weight
-
-
-def _env_human_name(env_id: str) -> str:
-    return env_id.replace("/", " ").replace("-", " ")
 
 
 def _set_display_flag(display: Any, method_name: str, value: bool) -> None:
@@ -554,15 +556,12 @@ async def run_session(
             if decision is None:
                 continue
 
-            delta_text = (
-                "n/a"
-                if decision.visual_delta is None
-                else f"{decision.visual_delta:.2f}"
-            )
-            event_summary = (
-                f"step {frame_event.step}; reward {frame_event.reward:+.2f}; "
-                f"episode reward {frame_event.episode_reward:+.2f}; "
-                f"delta {delta_text}; triggers {','.join(decision.reasons)}"
+            event_summary = format_event_summary(
+                step=frame_event.step,
+                reward=frame_event.reward,
+                episode_reward=frame_event.episode_reward,
+                visual_delta=decision.visual_delta,
+                triggers=decision.reasons,
             )
             recent_events.append(event_summary)
 
@@ -595,11 +594,11 @@ async def run_session(
             except TimeoutError:
                 continue
 
-            previous_text = " ".join(previous_narrations)
+            previous_text = join_previous_narrations(previous_narrations)
             context = NarrationContext(
-                env_human_name=_env_human_name(env_id),
+                env_human_name=humanize_env_id(env_id),
                 previous_narration=previous_text,
-                event_summary=" | ".join(recent_events),
+                event_summary=join_recent_events(recent_events),
             )
 
             started = perf_counter()
@@ -749,10 +748,12 @@ async def run_session(
                     continue
 
                 if action == "force_narrate":
-                    event_summary = (
-                        f"step {latest_display.step}; reward n/a; episode reward "
-                        f"{latest_display.episode_reward:+.2f}; delta n/a; "
-                        "triggers manual"
+                    event_summary = format_event_summary(
+                        step=latest_display.step,
+                        reward=None,
+                        episode_reward=latest_display.episode_reward,
+                        visual_delta=None,
+                        triggers=["manual"],
                     )
                     recent_events.append(event_summary)
                     dropped = _push_drop_oldest(

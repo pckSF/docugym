@@ -16,6 +16,12 @@ from PIL import Image
 from docugym.audio import AudioOutput
 from docugym.display import Display, DisplayAction
 from docugym.keyframes import KeyframeSelector
+from docugym.narration_events import (
+    format_event_summary,
+    humanize_env_id,
+    join_previous_narrations,
+    join_recent_events,
+)
 from docugym.narrator import NarrationContext, VLMNarrator
 from docugym.tts import KokoroTTS, SpeechSentence
 
@@ -368,7 +374,7 @@ class DocuWrapper(gym.Wrapper):
                 continue
 
             context = NarrationContext(
-                env_human_name=self._env_id.replace("/", " ").replace("-", " "),
+                env_human_name=humanize_env_id(self._env_id),
                 previous_narration=request.previous_narration,
                 event_summary=request.context_summary,
             )
@@ -598,18 +604,19 @@ class DocuWrapper(gym.Wrapper):
         timestamp: float,
     ) -> None:
         trigger_reasons = reasons or ["manual"]
-        delta_text = "n/a" if visual_delta is None else f"{visual_delta:.2f}"
-        event_summary = (
-            f"step {self._session_step}; reward {reward:+.2f}; episode reward "
-            f"{self._episode_reward:+.2f}; delta {delta_text}; "
-            f"triggers {','.join(trigger_reasons)}"
+        event_summary = format_event_summary(
+            step=self._session_step,
+            reward=reward,
+            episode_reward=self._episode_reward,
+            visual_delta=visual_delta,
+            triggers=trigger_reasons,
         )
 
         self._recent_events.append(event_summary)
-        context_summary = " | ".join(self._recent_events)
+        context_summary = join_recent_events(self._recent_events)
 
         with self._stats_lock:
-            previous_narration = " ".join(self._previous_narrations)
+            previous_narration = join_previous_narrations(self._previous_narrations)
 
         dropped = _push_drop_oldest_queue(
             self._narration_queue,

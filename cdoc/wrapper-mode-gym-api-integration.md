@@ -48,6 +48,17 @@ adding live DocuGym narration/subtitles and command-like toggles as constructor 
 - Added `tests/test_keyframes.py` to lock cadence/reward/delta trigger semantics
   and cooldown behavior independent of runtime orchestration details.
 
+### Implemented Phase 3 Outcome
+
+- Extracted shared narration event/context formatting helpers into
+  `docugym/narration_events.py` (`format_event_summary`, `humanize_env_id`,
+  `join_recent_events`, `join_previous_narrations`).
+- Updated `docugym/runtime.py` and `docugym/wrapper.py` to consume shared
+  formatting/context helpers, reducing prompt-context drift between production
+  and wrapper paths.
+- Added `tests/test_narration_events.py` to lock event-summary formatting and
+  context-join behavior.
+
 ## Options Considered
 
 #### Option 1: Keep CLI-only production surface
@@ -92,3 +103,5 @@ recommended production path for recording and full run management.
   tests, and README documentation.
 - 2026-05-07: Updated for Phase 2 refactor that shares keyframe selection logic
   between wrapper and canonical runtime paths.
+- 2026-05-07: Updated for Phase 3 refactor that shares narration-event formatting
+  and context-string assembly between wrapper and canonical runtime paths.
