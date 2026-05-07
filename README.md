@@ -30,6 +30,9 @@ The `run` command renders the live PyGame window and sends one selected frame
 per interval to the local OpenAI-compatible endpoint at `vlm.base_url`. Returned
 narration text is shown in subtitles and logged with per-call latency.
 
+Subtitles and HUD text are rendered in dedicated top/bottom text bands by
+default (`display.text_bands: true`) so gameplay pixels stay unobstructed.
+
 ## Useful Flags
 
 - `--narrate-every`: fixed frame cadence for Stage 4 synchronous narration.
@@ -37,3 +40,10 @@ narration text is shown in subtitles and logged with per-call latency.
 - `--wait-timeout`: readiness timeout in seconds.
 - `--policy`: shorthand for SB3 Hugging Face repo id; implies `--agent sb3`.
 - `--env-kwargs`: JSON object forwarded to `gym.make(...)`.
+
+## Runtime Shortcuts
+
+- `space`: pause or resume environment stepping.
+- `n`: force narration for the current frame.
+- `m`: mute or unmute voiced narration (subtitles continue).
+- `s`: save the current frame and latest narration text to `out/clips/`.
