@@ -42,6 +42,12 @@ docugym run \
   --env ALE/Pong-v5 \
   --policy sb3/ppo-PongNoFrameskip-v4 \
   --wait-for-vlm
+
+6. Record a narrated run to MP4 (optional Stage 9):
+
+```bash
+docugym run --config configs/atari.yaml --record out/session.mp4 --wait-for-vlm
+```
 ```
 
 The `run` command renders the live PyGame window, keeps gameplay smooth with the
@@ -61,6 +67,14 @@ local OpenAI-compatible VLM endpoint.
 - `m`: mute or unmute voiced narration (subtitles continue).
 - `s`: save the current frame and latest narration text to `out/clips/`.
 
+## Recording (Optional)
+
+- Use `--record out/session.mp4` to save gameplay + narration audio as MP4.
+- If `recording.enabled: true` is set in your config, `docugym run` records to
+	`recording.out_path` unless `--record` overrides it.
+- Recording requires a system `ffmpeg` binary in `PATH`.
+- Zero-code alternative: you can capture the PyGame window + system audio with OBS.
+
 ## Troubleshooting
 
 - vLLM startup appears slow:
@@ -78,3 +92,5 @@ local OpenAI-compatible VLM endpoint.
 - Audio glitches during high narration density:
 	increase `narration.interval_seconds` or `narration.min_gap_seconds` to
 	reduce synthesis pressure; stale narration candidates are dropped by design.
+- Recording fails immediately on startup:
+	ensure `ffmpeg` is installed and visible in `PATH`, or run without `--record`.
