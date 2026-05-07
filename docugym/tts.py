@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import importlib
 import re
 from typing import Any, AsyncIterator
 
@@ -81,8 +82,9 @@ class KokoroTTS:
             return self._pipeline
 
         try:
-            from kokoro import KPipeline
-        except ImportError as exc:  # pragma: no cover - optional runtime dep
+            kokoro_module = importlib.import_module("kokoro")
+            KPipeline = getattr(kokoro_module, "KPipeline")
+        except (ModuleNotFoundError, AttributeError) as exc:  # pragma: no cover
             raise RuntimeError(
                 "kokoro is required for voiced narration. Install kokoro or run "
                 "with --no-voice."

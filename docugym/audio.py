@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib
 import logging
 import queue
 from typing import Any
@@ -58,8 +59,8 @@ class AudioOutput:
             return
 
         try:
-            import sounddevice as sd
-        except ImportError as exc:  # pragma: no cover - optional runtime dep
+            sd = importlib.import_module("sounddevice")
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional runtime dep
             raise RuntimeError(
                 "sounddevice is required for voiced narration. Install sounddevice "
                 "or run with --no-voice."
