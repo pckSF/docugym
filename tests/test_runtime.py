@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any, cast
 
 import numpy as np
 
-from docugym.runtime import SpeechSentence, run_stage4_session
+from docugym.runtime import SpeechSentence, run_stage4_session, run_stage6_session_sync
 
 
 class DummyActionSpace:
@@ -119,6 +120,18 @@ class FakeAudioOutput:
         self.stopped = True
 
 
+class AsyncFakeNarrator:
+    def __init__(self, delay_seconds: float = 0.0) -> None:
+        self.delay_seconds = delay_seconds
+        self.calls: list[tuple[tuple[int, int, int], str]] = []
+
+    async def narrate_frame(self, frame: np.ndarray, context: Any) -> str:
+        if self.delay_seconds > 0:
+            await asyncio.sleep(self.delay_seconds)
+        self.calls.append((frame.shape, context.event_summary))
+        return "The patient traveller drifts onward."
+
+
 def test_run_stage4_session_narrates_on_fixed_cadence(monkeypatch) -> None:
     env = DummyEnv()
     displays: list[FakeDisplay] = []
@@ -223,3 +236,100 @@ def test_run_stage4_session_queues_tts_audio_when_voice_enabled(monkeypatch) -> 
         "The patient traveller drifts onward.",
     ]
     assert "The patient traveller drifts onward." in display.subtitles
+
+
+def test_run_stage6_session_narrates_on_reward_spikes(monkeypatch) -> None:
+    env = DummyEnv()
+    displays: list[FakeDisplay] = []
+
+    def fake_make_env(**_kwargs: Any) -> DummyEnv:
+        return env
+
+    def fake_display(**kwargs: Any) -> FakeDisplay:
+        instance = FakeDisplay(**kwargs)
+        displays.append(instance)
+        return instance
+
+    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
+    monkeypatch.setattr("docugym.runtime.Display", fake_display)
+
+    narrator = AsyncFakeNarrator()
+    result = run_stage6_session_sync(
+        env_id="ALE/Pong-v5",
+        seed=5,
+        fps=60,
+        window_scale=3,
+        subtitle_font="DejaVu Sans",
+        subtitle_size=22,
+        subtitle_max_text_width=960,
+        hud=True,
+        text_bands=True,
+        min_window_width=960,
+        env_kwargs={},
+        narrator=narrator,
+        narration_interval_seconds=999.0,
+        min_gap_seconds=0.0,
+        reward_spike_threshold=0.5,
+        pixel_delta_threshold=999.0,
+        max_context_events=3,
+        previous_narration_window=2,
+        agent_kind="random",
+        sb3_repo_id=None,
+        sb3_filename=None,
+        voice_enabled=False,
+        max_steps=6,
+    )
+
+    display = displays[0]
+    assert result.rendered_steps == 6
+    assert result.narration_count >= 1
+    assert result.dropped_narration_candidates == 0
+    assert len(narrator.calls) >= 1
+    assert env.closed is True
+    assert display.closed is True
+
+
+def test_run_stage6_session_drops_stale_candidates_under_backpressure(
+    monkeypatch,
+) -> None:
+    env = DummyEnv()
+
+    def fake_make_env(**_kwargs: Any) -> DummyEnv:
+        return env
+
+    def fake_display(**kwargs: Any) -> FakeDisplay:
+        return FakeDisplay(**kwargs)
+
+    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
+    monkeypatch.setattr("docugym.runtime.Display", fake_display)
+
+    slow_narrator = AsyncFakeNarrator(delay_seconds=0.01)
+    result = run_stage6_session_sync(
+        env_id="ALE/Pong-v5",
+        seed=5,
+        fps=240,
+        window_scale=3,
+        subtitle_font="DejaVu Sans",
+        subtitle_size=22,
+        subtitle_max_text_width=960,
+        hud=True,
+        text_bands=True,
+        min_window_width=960,
+        env_kwargs={},
+        narrator=slow_narrator,
+        narration_interval_seconds=999.0,
+        min_gap_seconds=0.0,
+        reward_spike_threshold=0.5,
+        pixel_delta_threshold=999.0,
+        max_context_events=3,
+        previous_narration_window=2,
+        agent_kind="random",
+        sb3_repo_id=None,
+        sb3_filename=None,
+        voice_enabled=False,
+        max_steps=25,
+    )
+
+    assert result.rendered_steps == 25
+    assert result.narration_count >= 1
+    assert result.dropped_narration_candidates >= 1

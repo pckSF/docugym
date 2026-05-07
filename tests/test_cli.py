@@ -318,7 +318,7 @@ run:
     assert captured["env_kwargs"] == {}
 
 
-def test_run_command_invokes_stage4_runner(monkeypatch, tmp_path: Path) -> None:
+def test_run_command_invokes_stage6_runner(monkeypatch, tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
     config_path.write_text(
         """
@@ -366,13 +366,17 @@ display:
         narration_count = 2
         latency_p50_ms = 850.0
         latency_p95_ms = 1200.0
+        dropped_narration_candidates = 1
 
-    def fake_run_stage4_session(**kwargs: object) -> FakeResult:
+    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
         captured.update(kwargs)
         return FakeResult()
 
     monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
-    monkeypatch.setattr("docugym.cli.run_stage4_session", fake_run_stage4_session)
+    monkeypatch.setattr(
+        "docugym.cli.run_stage6_session_sync",
+        fake_run_stage6_session_sync,
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -397,7 +401,9 @@ display:
     assert captured["env_id"] == "ALE/Pong-v5"
     assert captured["seed"] == 21
     assert captured["fps"] == 60
-    assert captured["narrate_every"] == 5
+    interval_seconds = captured["narration_interval_seconds"]
+    assert isinstance(interval_seconds, float)
+    assert abs(interval_seconds - (5.0 / 60.0)) < 1e-9
     assert captured["agent_kind"] == "random"
     assert captured["env_kwargs"] == {
         "frameskip": 4,
@@ -436,13 +442,17 @@ vlm:
         narration_count = 0
         latency_p50_ms = None
         latency_p95_ms = None
+        dropped_narration_candidates = 0
 
-    def fake_run_stage4_session(**kwargs: object) -> FakeResult:
+    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
         captured.update(kwargs)
         return FakeResult()
 
     monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
-    monkeypatch.setattr("docugym.cli.run_stage4_session", fake_run_stage4_session)
+    monkeypatch.setattr(
+        "docugym.cli.run_stage6_session_sync",
+        fake_run_stage6_session_sync,
+    )
 
     runner = CliRunner()
     result = runner.invoke(
@@ -499,13 +509,17 @@ tts:
         narration_count = 0
         latency_p50_ms = None
         latency_p95_ms = None
+        dropped_narration_candidates = 0
 
-    def fake_run_stage4_session(**kwargs: object) -> FakeResult:
+    def fake_run_stage6_session_sync(**kwargs: object) -> FakeResult:
         captured.update(kwargs)
         return FakeResult()
 
     monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
-    monkeypatch.setattr("docugym.cli.run_stage4_session", fake_run_stage4_session)
+    monkeypatch.setattr(
+        "docugym.cli.run_stage6_session_sync",
+        fake_run_stage6_session_sync,
+    )
 
     runner = CliRunner()
     result = runner.invoke(

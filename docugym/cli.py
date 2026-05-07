@@ -13,7 +13,7 @@ from docugym.display import run_display_smoketest
 from docugym.env import run_smoketest
 from docugym.logging_config import configure_logging
 from docugym.narrator import VLMNarrator
-from docugym.runtime import run_stage4_session
+from docugym.runtime import run_stage6_session_sync
 
 app = typer.Typer(
     add_completion=False,
@@ -305,10 +305,13 @@ def run(
         min=1,
         help="Optional max number of rendered steps before exiting.",
     ),
-    narrate_every: int = typer.Option(
-        60,
+    narrate_every: int | None = typer.Option(
+        None,
         min=1,
-        help="Generate one narration every N rendered frames.",
+        help=(
+            "Override fixed narration cadence in frames. When omitted, "
+            "config narration.interval_seconds is used."
+        ),
     ),
     agent: Literal["random", "scripted", "sb3"] | None = typer.Option(
         None,
@@ -362,7 +365,7 @@ def run(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Run Stage 4 synchronous frame narration with live display overlays."""
+    """Run Stage 6 async narration pipeline with keyframe selection."""
 
     state = _get_state(ctx)
     config = state.settings
@@ -388,6 +391,9 @@ def run(
         config.display.text_bands if text_bands is None else text_bands
     )
     effective_voice = config.tts.enabled if voice is None else voice
+    effective_interval_seconds = config.narration.interval_seconds
+    if narrate_every is not None:
+        effective_interval_seconds = narrate_every / float(effective_fps)
 
     effective_agent = config.agent.kind if agent is None else agent
     effective_repo_id = repo_id or config.agent.sb3_repo_id
@@ -426,7 +432,7 @@ def run(
             )
             raise typer.Exit(code=1)
 
-    result = run_stage4_session(
+    result = run_stage6_session_sync(
         env_id=env_id,
         seed=effective_seed,
         fps=effective_fps,
@@ -439,7 +445,12 @@ def run(
         min_window_width=effective_min_window_width,
         env_kwargs=effective_env_kwargs,
         narrator=narrator,
-        narrate_every=narrate_every,
+        narration_interval_seconds=effective_interval_seconds,
+        min_gap_seconds=config.narration.min_gap_seconds,
+        reward_spike_threshold=config.narration.reward_spike_threshold,
+        pixel_delta_threshold=config.narration.pixel_delta_threshold,
+        max_context_events=config.narration.max_context_events,
+        previous_narration_window=config.narration.previous_narration_window,
         agent_kind=effective_agent,
         sb3_repo_id=effective_repo_id,
         sb3_filename=effective_filename,
@@ -451,6 +462,7 @@ def run(
         tts_speed=config.tts.kokoro.speed,
         tts_sample_rate=config.tts.kokoro.sample_rate,
         max_steps=steps,
+        max_episodes=config.run.max_episodes,
     )
 
     latency_summary = "n/a"
@@ -460,15 +472,17 @@ def run(
         )
 
     logger.info(
-        "Run complete: env=%s rendered_steps=%d narrations=%d %s",
+        "Run complete: env=%s rendered_steps=%d narrations=%d dropped=%d %s",
         env_id,
         result.rendered_steps,
         result.narration_count,
+        result.dropped_narration_candidates,
         latency_summary,
     )
     typer.echo(
         "Run complete: "
         f"rendered={result.rendered_steps} "
         f"narrations={result.narration_count} "
+        f"dropped={result.dropped_narration_candidates} "
         f"{latency_summary}"
     )
