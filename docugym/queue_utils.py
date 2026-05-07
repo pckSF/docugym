@@ -1,3 +1,9 @@
+"""Queue helpers implementing non-blocking backpressure strategies.
+
+Runtime and wrapper code use these utilities to prefer fresh state updates over
+strict delivery guarantees when producers outpace consumers.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,7 +12,11 @@ from typing import Any
 
 
 def push_drop_oldest_async(queue_obj: asyncio.Queue[Any], item: Any) -> bool:
-    """Enqueue without blocking, dropping oldest item when queue is full."""
+    """Enqueue without blocking and drop the oldest item on overflow.
+
+    Returns:
+        ``True`` when an item had to be dropped due to queue pressure.
+    """
 
     dropped = False
     if queue_obj.full():
@@ -28,7 +38,15 @@ def drain_latest_async(
     queue_obj: asyncio.Queue[Any],
     initial: Any | None = None,
 ) -> Any | None:
-    """Drain an asyncio queue and return the newest available item."""
+    """Drain an asyncio queue and return the newest available item.
+
+    Args:
+        queue_obj: Queue to drain non-blockingly.
+        initial: Initial value returned when queue is empty.
+
+    Returns:
+        Most recent queued item or ``initial`` when no items are available.
+    """
 
     latest = initial
     while True:
@@ -39,7 +57,11 @@ def drain_latest_async(
 
 
 def clear_async_queue(queue_obj: asyncio.Queue[Any]) -> None:
-    """Remove all currently queued items from an asyncio queue."""
+    """Remove all currently queued items from an asyncio queue.
+
+    Args:
+        queue_obj: Queue to clear in-place.
+    """
 
     while True:
         try:
@@ -49,7 +71,11 @@ def clear_async_queue(queue_obj: asyncio.Queue[Any]) -> None:
 
 
 def push_drop_oldest_sync(queue_obj: queue.Queue[Any], item: Any) -> bool:
-    """Enqueue without blocking, dropping oldest item when queue is full."""
+    """Synchronous variant of :func:`push_drop_oldest_async`.
+
+    Returns:
+        ``True`` when an item had to be dropped due to queue pressure.
+    """
 
     dropped = False
     if queue_obj.full():
@@ -71,7 +97,15 @@ def drain_latest_sync(
     queue_obj: queue.Queue[Any],
     initial: Any | None = None,
 ) -> Any | None:
-    """Drain a sync queue and return the newest available item."""
+    """Drain a sync queue and return the newest available item.
+
+    Args:
+        queue_obj: Queue to drain non-blockingly.
+        initial: Initial value returned when queue is empty.
+
+    Returns:
+        Most recent queued item or ``initial`` when no items are available.
+    """
 
     latest = initial
     while True:

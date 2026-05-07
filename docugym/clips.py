@@ -1,3 +1,9 @@
+"""Helpers for persisting shareable frame+narration snapshot artifacts.
+
+These utilities back keyboard-driven clip capture in runtime and wrapper flows,
+producing deterministic PNG/TXT pairs for quick qualitative review.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -10,6 +16,8 @@ _CLIP_COUNTER = count()
 
 
 def _save_frame_png(frame: np.ndarray, path: Path) -> None:
+    """Persist a frame as PNG, normalizing dtype for Pillow compatibility."""
+
     try:
         from PIL import Image
     except ImportError as exc:  # pragma: no cover - depends on optional install
@@ -29,7 +37,11 @@ def save_clip_snapshot(
     narration: str,
     out_dir: Path = Path("out/clips"),
 ) -> tuple[Path, Path]:
-    """Persist one frame+narration pair as a shareable clip snapshot."""
+    """Save one frame and narration text as a timestamped snapshot pair.
+
+    Returns:
+        Tuple of ``(frame_png_path, narration_text_path)``.
+    """
 
     out_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")

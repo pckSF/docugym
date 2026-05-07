@@ -1,3 +1,10 @@
+"""Pydantic configuration models and settings-source composition for DocuGym.
+
+The configuration tree is shared by CLI, runtime, and wrapper entrypoints so
+operational defaults live in YAML while environment variables can override values
+for CI and deployment-specific runs.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,7 +22,15 @@ DEFAULT_CONFIG_PATH = Path("configs/default.yaml")
 
 
 class RunSettings(BaseModel):
-    """Runtime settings for environment stepping and pacing."""
+    """Runtime settings for environment stepping and pacing.
+
+    Attributes:
+        env_id: Default Gymnasium environment id.
+        env_kwargs: Extra kwargs forwarded to ``gym.make``.
+        seed: Default reset/action-space seed.
+        fps: Target display framerate.
+        max_episodes: Default episode cap for CLI run mode.
+    """
 
     env_id: str = "ALE/SpaceInvaders-v5"
     env_kwargs: dict[str, Any] = Field(default_factory=dict)
@@ -25,7 +40,18 @@ class RunSettings(BaseModel):
 
 
 class AgentSettings(BaseModel):
-    """Agent selection and model source settings."""
+    """Agent selection and model source settings.
+
+    Attributes:
+        kind: Action source kind used by runtime and tuning flows.
+        sb3_repo_id: Default Hugging Face repository id for SB3 policies.
+        sb3_filename: Default SB3 artifact filename.
+        sb3_revision: Optional SB3 revision pin.
+        sb3_algorithm: Optional explicit SB3 algorithm hint.
+        device: Device string forwarded to SB3 loader.
+        trusted_repo_prefixes: Trusted repository id prefixes.
+        enforce_trusted_repo: Whether untrusted repo ids raise instead of warn.
+    """
 
     kind: Literal["sb3", "random", "scripted"] = "sb3"
     sb3_repo_id: str = "sb3/ppo-SpaceInvadersNoFrameskip-v4"
@@ -38,7 +64,16 @@ class AgentSettings(BaseModel):
 
 
 class VLMSettings(BaseModel):
-    """Vision-language model server and sampling settings."""
+    """Vision-language model server and sampling settings.
+
+    Attributes:
+        base_url: OpenAI-compatible endpoint base URL.
+        model: Model identifier sent to the completion endpoint.
+        max_tokens: Completion token cap per narration request.
+        temperature: Sampling temperature.
+        top_p: Nucleus sampling parameter.
+        image_detail: Image detail hint for multimodal requests.
+    """
 
     base_url: str = "http://localhost:8000/v1"
     model: str = "Qwen/Qwen3-VL-8B-Instruct-AWQ"
@@ -49,7 +84,16 @@ class VLMSettings(BaseModel):
 
 
 class NarrationSettings(BaseModel):
-    """Controls for narration trigger cadence and context."""
+    """Controls for narration trigger cadence and context.
+
+    Attributes:
+        interval_seconds: Baseline cadence interval for narration checks.
+        min_gap_seconds: Cooldown between accepted narration candidates.
+        reward_spike_threshold: Absolute reward trigger threshold.
+        pixel_delta_threshold: Visual-delta trigger threshold.
+        max_context_events: Number of recent events retained in prompt context.
+        previous_narration_window: Number of previous narrations retained.
+    """
 
     interval_seconds: float = 3.0
     min_gap_seconds: float = 1.5
@@ -60,7 +104,13 @@ class NarrationSettings(BaseModel):
 
 
 class KokoroSettings(BaseModel):
-    """Kokoro voice and synthesis output settings."""
+    """Kokoro voice and synthesis output settings.
+
+    Attributes:
+        voice: Kokoro voice id.
+        speed: Voice speed multiplier.
+        sample_rate: Output sample rate in Hz.
+    """
 
     voice: str = "bm_george"
     speed: float = 0.95
@@ -68,13 +118,24 @@ class KokoroSettings(BaseModel):
 
 
 class XTTSSettings(BaseModel):
-    """Optional XTTS settings for alternate synthesis backends."""
+    """Optional XTTS settings for alternate synthesis backends.
+
+    Attributes:
+        speaker_wav: Reference speaker WAV path.
+    """
 
     speaker_wav: str = "data/voices/british_narrator.wav"
 
 
 class TTSSettings(BaseModel):
-    """Text-to-speech backend configuration."""
+    """Text-to-speech backend configuration.
+
+    Attributes:
+        enabled: Whether voice synthesis is enabled by default.
+        engine: Active TTS backend name.
+        kokoro: Kokoro backend settings.
+        xtts: XTTS backend settings.
+    """
 
     enabled: bool = True
     engine: Literal["kokoro", "xtts", "chatterbox"] = "kokoro"
@@ -83,7 +144,17 @@ class TTSSettings(BaseModel):
 
 
 class DisplaySettings(BaseModel):
-    """Window and subtitle rendering settings."""
+    """Window and subtitle rendering settings.
+
+    Attributes:
+        window_scale: Integer frame upscaling factor.
+        min_window_width: Minimum window width in pixels.
+        subtitle_font: Font family used for subtitle/HUD text.
+        subtitle_size: Subtitle font size in pixels.
+        subtitle_max_text_width: Maximum subtitle wrapping width in pixels.
+        hud: Whether HUD text is enabled.
+        text_bands: Whether HUD/subtitles use dedicated text bands.
+    """
 
     window_scale: int = 3
     min_window_width: int = 960
@@ -95,14 +166,32 @@ class DisplaySettings(BaseModel):
 
 
 class RecordingSettings(BaseModel):
-    """Optional recording output controls."""
+    """Optional recording output controls.
+
+    Attributes:
+        enabled: Whether session recording is enabled by default.
+        out_path: Default recording output path.
+    """
 
     enabled: bool = False
     out_path: str = "out/session.mp4"
 
 
 class AppSettings(BaseSettings):
-    """Top-level configuration model loaded from YAML and environment."""
+    """Top-level application settings model with layered source loading.
+
+    Precedence is: explicit init kwargs, environment variables, dotenv values,
+    then YAML defaults.
+
+    Attributes:
+        run: Runtime stepping defaults.
+        agent: Action-source and policy-loading defaults.
+        vlm: Narrator endpoint and sampling defaults.
+        narration: Keyframe and context-window defaults.
+        tts: Voice synthesis defaults.
+        display: Display rendering defaults.
+        recording: Recording defaults.
+    """
 
     run: RunSettings = Field(default_factory=RunSettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
@@ -129,6 +218,19 @@ class AppSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Define source precedence for settings loading.
+
+        Args:
+            settings_cls: Effective settings subclass being instantiated.
+            init_settings: Explicit init kwargs source.
+            env_settings: Environment-variable source.
+            dotenv_settings: Dotenv-file source.
+            file_secret_settings: File-based secret source.
+
+        Returns:
+            Ordered tuple of settings sources used by pydantic-settings.
+        """
+
         yaml_path = getattr(settings_cls, "_yaml_path", cls._yaml_path)
         return (
             init_settings,
@@ -140,7 +242,14 @@ class AppSettings(BaseSettings):
 
 
 def load_settings(config_path: Path | str = DEFAULT_CONFIG_PATH) -> AppSettings:
-    """Load app settings from YAML, overridden by environment variables."""
+    """Load app settings from YAML with environment-variable overrides.
+
+    Args:
+        config_path: YAML configuration file path.
+
+    Returns:
+        Validated application settings model.
+    """
 
     yaml_path = Path(config_path)
 

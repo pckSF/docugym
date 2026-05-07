@@ -1,10 +1,23 @@
+"""Formatting helpers for compact, model-friendly narration context text.
+
+Stable string formatting keeps narrator prompts comparable between sessions and
+reduces accidental prompt drift when runtime internals evolve.
+"""
+
 from __future__ import annotations
 
 from typing import Iterable, Sequence
 
 
 def humanize_env_id(env_id: str) -> str:
-    """Convert env id to a human-readable scene label."""
+    """Convert environment id text into a human-readable scene label.
+
+    Args:
+        env_id: Gymnasium environment id.
+
+    Returns:
+        Readable scene label used in narration context prompts.
+    """
 
     return env_id.replace("/", " ").replace("-", " ")
 
@@ -17,7 +30,11 @@ def format_event_summary(
     visual_delta: float | None,
     triggers: Sequence[str],
 ) -> str:
-    """Build stable event-summary text used in narrator context windows."""
+    """Build a stable one-line event summary for narrator context windows.
+
+    The output is intentionally compact and deterministic so prompt behavior is
+    easier to compare across runs and model variants.
+    """
 
     reward_text = "n/a" if reward is None else f"{reward:+.2f}"
     delta_text = "n/a" if visual_delta is None else f"{visual_delta:.2f}"
@@ -30,12 +47,26 @@ def format_event_summary(
 
 
 def join_recent_events(events: Iterable[str]) -> str:
-    """Join recent events into one compact narration context string."""
+    """Join recent events into one compact narration context string.
+
+    Args:
+        events: Iterable of event-summary strings.
+
+    Returns:
+        Pipe-separated context summary.
+    """
 
     return " | ".join(event for event in events if event)
 
 
 def join_previous_narrations(narrations: Iterable[str]) -> str:
-    """Join prior narration snippets for continuity prompts."""
+    """Join prior narration snippets for continuity prompts.
+
+    Args:
+        narrations: Iterable of previous narration strings.
+
+    Returns:
+        Whitespace-normalized continuity context string.
+    """
 
     return " ".join(part.strip() for part in narrations if part).strip()

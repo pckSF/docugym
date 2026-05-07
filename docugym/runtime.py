@@ -1,3 +1,10 @@
+"""Async orchestration entrypoint for narrated DocuGym sessions.
+
+This module coordinates environment stepping, keyframe selection, VLM narration,
+optional TTS playback, display rendering, and optional MP4 recording in a bounded
+queue pipeline that prefers fresh gameplay over stale narration work.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -56,7 +63,20 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class RunResult:
-    """Aggregated metrics from a narration run."""
+    """Aggregated metrics returned from :func:`run_session`.
+
+    Attributes:
+        rendered_steps: Total number of rendered environment steps.
+        narration_count: Number of narration requests processed.
+        latency_p50_ms: Median narration latency in milliseconds.
+        latency_p95_ms: 95th percentile narration latency in milliseconds.
+        dropped_narration_candidates: Combined dropped keyframe/TTS inputs.
+        dropped_keyframe_candidates: Number of keyframe candidates dropped due to
+            narration queue pressure.
+        dropped_tts_inputs: Number of narration texts dropped before TTS synthesis.
+        narration_failures: Number of narration requests that failed and fell back.
+        recording_failed: Whether recording was disabled after a recorder failure.
+    """
 
     rendered_steps: int
     narration_count: int
@@ -107,30 +127,69 @@ class _NarrationCandidate:
 
 @runtime_checkable
 class AsyncNarratorClient(Protocol):
-    """Async narrator contract used by the runtime pipeline."""
+    """Async narrator contract consumed by the runtime pipeline.
+
+    Runtime adapters use this protocol to accept custom narrator implementations
+    without binding to one concrete client class.
+    """
 
     async def narrate_frame(self, frame: np.ndarray, context: NarrationContext) -> str:
-        """Return narration text for a selected keyframe."""
+        """Return narration text for a selected keyframe.
+
+        Args:
+            frame: Selected RGB/RGBA frame.
+            context: Continuity/context payload for prompt construction.
+
+        Returns:
+            Narration text for display and optional TTS.
+        """
 
 
 @runtime_checkable
 class AsyncSpeakerClient(Protocol):
-    """Async speaker interface used by the runtime pipeline."""
+    """Async speaker contract for sentence-level speech synthesis.
+
+    Implementations are expected to stream sentence outputs so subtitles and audio
+    playback can progress incrementally.
+    """
 
     def speak(self, text: str) -> AsyncIterator[SpeechSentence]:
-        """Yield sentence-level speech outputs for a narration text."""
+        """Yield sentence-level speech outputs for a narration text.
+
+        Args:
+            text: Narration text to synthesize.
+
+        Returns:
+            Async iterator of sentence outputs with text+audio chunks.
+        """
 
 
 @runtime_checkable
 class NarratorClient(Protocol):
-    """Structural narrator type for synchronous narration clients."""
+    """Structural narrator type for synchronous narration clients.
+
+    Used when narration work is delegated to background threads.
+    """
 
     def narrate_frame_sync(self, frame: np.ndarray, context: NarrationContext) -> str:
-        """Return narration text for a given frame and context."""
+        """Return narration text for a given frame and context.
+
+        Args:
+            frame: Selected RGB/RGBA frame.
+            context: Continuity/context payload for prompt construction.
+
+        Returns:
+            Narration text for display and optional TTS.
+        """
 
 
 class SpeechSentence(Protocol):
-    """Sentence-level TTS output used for subtitle and audio streaming."""
+    """Sentence-level TTS output used for subtitle and audio streaming.
+
+    Attributes:
+        graphemes: Subtitle text for this spoken sentence.
+        chunks: Audio chunks for this sentence in playback order.
+    """
 
     graphemes: str
     chunks: list[np.ndarray]
@@ -138,41 +197,90 @@ class SpeechSentence(Protocol):
 
 @runtime_checkable
 class SpeakerClient(Protocol):
-    """Synchronous speaker interface used by the runtime loop."""
+    """Synchronous speaker contract used by non-async runtime paths.
+
+    Implementations return full sentence output sequences at once.
+    """
 
     def speak_sync(self, text: str) -> Sequence[SpeechSentence]:
-        """Synthesize sentence-level audio chunks for a narration text."""
+        """Synthesize sentence-level audio chunks for narration text.
+
+        Args:
+            text: Narration text to synthesize.
+
+        Returns:
+            Sequence of sentence outputs with text+audio chunks.
+        """
 
 
 @runtime_checkable
 class AudioOutputClient(Protocol):
-    """Audio output sink contract used by the runtime loop."""
+    """Audio output sink contract used by runtime playback integration.
+
+    Runtime code uses this abstraction to support alternate audio backends.
+    """
 
     def start(self) -> None:
-        """Start the audio callback stream."""
+        """Start the audio callback stream.
+
+        Called once before the runtime begins enqueueing speech chunks.
+        """
 
     def enqueue(self, chunk: np.ndarray) -> None:
-        """Queue one mono float32 chunk for playback."""
+        """Queue one mono float32 chunk for playback.
+
+        Args:
+            chunk: One chunk of synthesized mono audio samples.
+        """
 
     def stop(self) -> None:
-        """Stop and release audio stream resources."""
+        """Stop and release audio stream resources.
+
+        Called during runtime teardown to release backend handles.
+        """
 
 
 @runtime_checkable
 class SessionRecorderClient(Protocol):
-    """Recorder sink contract used by runtime recording integration."""
+    """Recorder sink contract used by runtime recording integration.
+
+    Implementations accept frame/audio streams and finalize optional artifacts.
+    """
 
     def write_video_frame(self, frame: np.ndarray) -> None:
-        """Append one rendered frame to the recording stream."""
+        """Append one rendered frame to the recording stream.
+
+        Args:
+            frame: RGB/RGBA frame to append.
+        """
 
     def write_audio_chunk(self, chunk: np.ndarray, *, timestamp: float) -> None:
-        """Append one synthesized audio chunk at a monotonic timestamp."""
+        """Append one synthesized chunk at a monotonic timestamp.
+
+        Args:
+            chunk: Mono audio samples.
+            timestamp: Monotonic timestamp associated with chunk emission.
+        """
 
     def close(self, *, end_timestamp: float) -> Path | None:
-        """Finalize recording artifacts and return saved output path."""
+        """Finalize recording artifacts and return saved output path.
+
+        Args:
+            end_timestamp: Monotonic timestamp marking session end.
+
+        Returns:
+            Output path when artifacts were saved; otherwise ``None``.
+        """
 
 
 def _percentile_sorted(ordered: Sequence[float], quantile: float) -> float | None:
+    """Return one linearly interpolated quantile from sorted values.
+
+    The caller is expected to provide data already sorted in ascending order. The
+    function uses linear interpolation between adjacent ranks so small sample sets
+    produce stable percentile estimates instead of abrupt jumps.
+    """
+
     if not ordered:
         return None
     if len(ordered) == 1:
@@ -192,6 +300,8 @@ def _percentile_sorted(ordered: Sequence[float], quantile: float) -> float | Non
 def _percentiles(
     values: Sequence[float], quantiles: Sequence[float]
 ) -> list[float | None]:
+    """Compute several quantiles with one shared sort pass."""
+
     if not values:
         return [None for _ in quantiles]
 
@@ -200,12 +310,16 @@ def _percentiles(
 
 
 def _set_display_flag(display: Any, method_name: str, value: bool) -> None:
+    """Call an optional display mutator when the method exists."""
+
     method = getattr(display, method_name, None)
     if callable(method):
         method(value)
 
 
 def _clear_audio_buffer(audio_output: AudioOutputClient) -> None:
+    """Flush buffered audio only when the backend exposes a clear hook."""
+
     clear = getattr(audio_output, "clear", None)
     if callable(clear):
         clear()
@@ -216,6 +330,16 @@ async def _narrate_async(
     frame: np.ndarray,
     context: NarrationContext,
 ) -> str:
+    """Dispatch narration to either async or sync narrator implementations.
+
+    Runtime code uses this adapter to keep one async call site while still
+    accepting synchronous narrator clients. Sync narrators are moved to a worker
+    thread so the event loop remains responsive during network or model latency.
+
+    Raises:
+        TypeError: If ``narrator`` does not implement either expected protocol.
+    """
+
     if isinstance(narrator, AsyncNarratorClient):
         return await narrator.narrate_frame(frame=frame, context=context)
 
@@ -233,6 +357,15 @@ async def _speak_async(
     speaker: AsyncSpeakerClient | SpeakerClient,
     text: str,
 ) -> AsyncIterator[SpeechSentence]:
+    """Yield sentence-level TTS results from async or sync speaker clients.
+
+    This normalizes both speaker styles into one async iterator so downstream
+    subtitle/audio streaming code does not branch on implementation type.
+
+    Raises:
+        TypeError: If ``speaker`` does not implement either expected protocol.
+    """
+
     if isinstance(speaker, AsyncSpeakerClient):
         async for sentence in speaker.speak(text):
             yield sentence
@@ -251,6 +384,13 @@ async def _queue_get_until_stop(
     queue_obj: asyncio.Queue[Any],
     stop_event: asyncio.Event,
 ) -> Any | None:
+    """Wait for queued work while still respecting cooperative shutdown.
+
+    The function races ``queue.get()`` against ``stop_event.wait()`` so consumer
+    tasks can terminate promptly when shutdown starts instead of hanging on an
+    empty queue.
+    """
+
     if not queue_obj.empty():
         return await queue_obj.get()
 
@@ -272,6 +412,8 @@ async def _queue_get_until_stop(
 
 
 async def _maybe_call_async_close(client: object) -> None:
+    """Await an ``aclose`` hook when present, ignoring non-async objects."""
+
     close = getattr(client, "aclose", None)
     if callable(close):
         result = close()
@@ -321,7 +463,86 @@ async def run_session(
     max_episodes: int | None = None,
     on_narration: Callable[[str, int, float], None] | None = None,
 ) -> RunResult:
-    """Run async narration with keyframe selection and queue backpressure."""
+    """Run one narrated gameplay session on the canonical async pipeline.
+
+    The runtime is designed to keep gameplay smooth under load by using bounded
+    queues and drop-oldest semantics for narration work. When voice output is
+    enabled, subtitle ownership shifts to sentence-level TTS output so on-screen
+    text follows spoken chunks instead of full-paragraph narration blocks.
+
+    Args:
+        env_id: Gymnasium environment id (for example ``ALE/SpaceInvaders-v5``).
+        seed: Seed used for environment reset and action-space determinism.
+        fps: Target display framerate.
+        window_scale: Integer scaling factor for rendered frames.
+        subtitle_font: Font name used for subtitle and HUD rendering.
+        subtitle_size: Base subtitle font size in pixels.
+        subtitle_max_text_width: Maximum subtitle wrapping width in pixels.
+        hud: Whether to render the status bar.
+        text_bands: Whether to reserve dedicated text bands outside gameplay.
+        min_window_width: Minimum window width used for narrow environments.
+        env_kwargs: Extra kwargs forwarded to ``gym.make``.
+        narrator: Narrator client implementing async or sync narration protocol.
+        narration_interval_seconds: Baseline cadence trigger interval.
+        min_gap_seconds: Cooldown between accepted narration events.
+        reward_spike_threshold: Absolute reward threshold that forces narration.
+        pixel_delta_threshold: Visual delta threshold that forces narration.
+        max_context_events: Number of recent event summaries retained in context.
+        previous_narration_window: Number of prior narrations kept for continuity.
+        agent_kind: Action source (``random``, ``scripted``, or ``sb3``).
+        sb3_repo_id: Hugging Face repo id for SB3 policy loading.
+        sb3_filename: SB3 policy artifact filename.
+        sb3_algorithm: Optional explicit SB3 algorithm override.
+        sb3_device: Torch device string used by SB3 policy loading.
+        trusted_repo_prefixes: Allowed SB3 repo prefixes for trust enforcement.
+        enforce_trusted_repo: Whether untrusted SB3 repos raise instead of warn.
+        sb3_revision: Optional Hugging Face revision pin for SB3 artifacts.
+        voice_enabled: Whether narration should be synthesized to audio.
+        tts_engine: TTS backend selector (currently ``kokoro`` only).
+        tts_voice: Kokoro voice id.
+        tts_speed: Kokoro speaking-rate multiplier.
+        tts_sample_rate: Audio sample rate for playback/recording alignment.
+        speaker: Optional injected speaker implementation.
+        audio_output: Optional injected audio output sink.
+        record_out_path: Optional MP4 output path to enable recording.
+        recorder: Optional injected session recorder.
+        ffmpeg_binary: FFmpeg executable name/path used when recorder is created.
+        max_steps: Optional hard cap on rendered steps.
+        max_episodes: Optional hard cap on completed episodes.
+        on_narration: Optional callback invoked per narration output.
+
+    Returns:
+        Aggregated counters and latency percentiles from the session.
+
+    Raises:
+        ValueError: If validation of cadence limits, SB3 options, or bounds fails.
+        TypeError: If rendered frames are not numpy arrays in RGB-array mode.
+
+    Example:
+        result = await run_session(
+            env_id="ALE/SpaceInvaders-v5",
+            seed=42,
+            fps=60,
+            window_scale=3,
+            subtitle_font="DejaVu Sans",
+            subtitle_size=22,
+            subtitle_max_text_width=960,
+            hud=True,
+            text_bands=True,
+            min_window_width=960,
+            env_kwargs=None,
+            narrator=my_narrator,
+            narration_interval_seconds=3.0,
+            min_gap_seconds=1.5,
+            reward_spike_threshold=5.0,
+            pixel_delta_threshold=8.0,
+            max_context_events=3,
+            previous_narration_window=2,
+            agent_kind="random",
+            sb3_repo_id=None,
+            sb3_filename=None,
+        )
+    """
 
     validate_narration_config(
         narration_interval_seconds=narration_interval_seconds,
@@ -860,7 +1081,15 @@ async def run_session(
 
 
 def run_session_sync(**kwargs: Any) -> RunResult:
-    """Synchronous wrapper around the async runtime pipeline."""
+    """Run :func:`run_session` from synchronous call sites.
+
+    This helper exists for CLI and wrapper integration points that are not running
+    an event loop. It intentionally fails fast inside active loops to avoid nested
+    loop bugs and to push async callers toward ``await run_session(...)``.
+
+    Raises:
+        RuntimeError: If called while an event loop is already running.
+    """
 
     try:
         asyncio.get_running_loop()

@@ -1,3 +1,9 @@
+"""PyGame rendering utilities for gameplay frames and narration overlays.
+
+This module is shared by both async runtime and wrapper modes so keyboard controls,
+subtitle rendering policy, and HUD status formatting remain behaviorally aligned.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -16,7 +22,15 @@ DisplayAction = Literal[
 
 
 class Display:
-    """Render Gym frames with subtitles and a compact status bar."""
+    """Render gameplay frames with HUD/subtitle overlays and keyboard actions.
+
+    The class owns all PyGame lifecycle state and exposes lightweight mutators so
+    orchestration code can push latest status/subtitle text without managing SDL
+    details directly.
+
+    This type intentionally centralizes keyboard-action mapping so runtime and
+    wrapper orchestration paths stay behaviorally aligned.
+    """
 
     def __init__(
         self,
@@ -30,6 +44,23 @@ class Display:
         min_window_width: int = 960,
         subtitle_max_text_width: int = 960,
     ) -> None:
+        """Initialize a PyGame window manager for narrated frame rendering.
+
+        Args:
+            env_id: Environment identifier shown in HUD text.
+            fps: Target render framerate.
+            window_scale: Integer scaling factor applied to raw frame dimensions.
+            subtitle_font: Font family used for subtitle and HUD text.
+            subtitle_size: Base subtitle font size in pixels.
+            hud: Whether to render the status HUD.
+            text_bands: Whether HUD/subtitle text uses dedicated top/bottom bands.
+            min_window_width: Minimum display width; narrow frames are centered.
+            subtitle_max_text_width: Maximum subtitle wrapping width in pixels.
+
+        Raises:
+            ValueError: If FPS or sizing parameters are non-positive.
+        """
+
         if fps <= 0:
             raise ValueError("fps must be a positive integer")
         if window_scale <= 0:
@@ -70,52 +101,97 @@ class Display:
 
     @property
     def is_open(self) -> bool:
-        """Return whether the display loop is still active."""
+        """Return whether the display loop is still active.
+
+        Returns:
+            ``True`` while the display window remains open.
+        """
 
         return self._is_open
 
     def close(self) -> None:
-        """Close the display and release pygame resources."""
+        """Close the display and release PyGame resources.
+
+        Safe to call from shutdown paths where the window might already be closed.
+        """
 
         self._is_open = False
         pygame.display.quit()
         pygame.quit()
 
     def set_subtitle(self, text: str) -> None:
-        """Set the subtitle text shown at the bottom of the frame."""
+        """Set the current subtitle text.
+
+        Args:
+            text: Subtitle content to render on the next frame.
+        """
 
         self._subtitle = text.strip()
 
     def set_status(self, step: int, episode_reward: float) -> None:
-        """Update status-bar values rendered in the HUD."""
+        """Update HUD status values.
+
+        Args:
+            step: Current global environment step.
+            episode_reward: Accumulated reward within the current episode.
+        """
 
         self._step = step
         self._episode_reward = episode_reward
 
     def set_narrating(self, active: bool) -> None:
-        """Update HUD narration activity indicator."""
+        """Update HUD narration-activity indicator.
+
+        Args:
+            active: Whether narration/TTS is currently active.
+        """
 
         self._narrating = active
 
     def set_paused(self, paused: bool) -> None:
-        """Update HUD pause indicator."""
+        """Update HUD pause indicator.
+
+        Args:
+            paused: Whether playback is currently paused.
+        """
 
         self._paused = paused
 
     def set_muted(self, muted: bool) -> None:
-        """Update HUD audio muted indicator."""
+        """Update HUD audio-muted indicator.
+
+        Args:
+            muted: Whether audio output should be shown as muted.
+        """
 
         self._muted = muted
 
     def poll_actions(self) -> list[DisplayAction]:
-        """Return and clear pending keyboard-triggered display actions."""
+        """Return and clear pending keyboard-triggered actions.
+
+        Returns:
+            FIFO-ordered list of display actions since the last poll.
+        """
 
         actions = list(self._pending_actions)
         self._pending_actions.clear()
         return actions
 
     def blit_frame(self, frame: np.ndarray) -> bool:
-        """Draw a frame, text overlays or bands, and pace to the configured FPS."""
+        """Render one frame plus overlays, then pace to configured FPS.
+
+        Returns ``False`` when the window has been closed so callers can terminate
+        their loop without additional event polling.
+
+        Args:
+            frame: Environment RGB/RGBA frame with shape ``(H, W, C)``.
+
+        Returns:
+            ``True`` while the window remains open; otherwise ``False``.
+
+        Raises:
+            ValueError: If frame dimensionality or channels are invalid.
+        """
 
         if not self._is_open:
             return False
@@ -421,7 +497,32 @@ def run_display_smoketest(
     env_kwargs: dict[str, Any] | None = None,
     max_steps: int | None = None,
 ) -> int:
-    """Run a random-agent environment loop in a live PyGame window."""
+    """Run a random-agent live display loop for visual smoke validation.
+
+    This helper is intentionally simple: it exercises frame rendering, subtitle
+    drawing, keyboard handling, and env reset behavior without narration workers.
+
+    Args:
+        env_id: Gymnasium environment id.
+        seed: Random seed for reset/action-space sampling.
+        fps: Target display framerate.
+        window_scale: Integer frame upscaling factor.
+        subtitle: Static subtitle text rendered during the smoke run.
+        subtitle_font: Font family used for subtitle/HUD text.
+        subtitle_size: Subtitle font size in pixels.
+        hud: Whether to render HUD text.
+        text_bands: Whether to reserve text bands around gameplay.
+        min_window_width: Minimum window width in pixels.
+        subtitle_max_text_width: Maximum subtitle wrapping width in pixels.
+        env_kwargs: Optional kwargs forwarded to ``gym.make``.
+        max_steps: Optional upper bound on rendered steps.
+
+    Returns:
+        Number of frames rendered before exit.
+
+    Raises:
+        ValueError: If ``max_steps`` is provided but non-positive.
+    """
 
     if max_steps is not None and max_steps <= 0:
         raise ValueError("max_steps must be a positive integer when provided")

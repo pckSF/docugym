@@ -1,3 +1,9 @@
+"""Shared narration defaults and validation constraints.
+
+Keeping this in a tiny module avoids drift between runtime and wrapper knobs and
+ensures both paths fail fast on invalid cadence-related values.
+"""
+
 from __future__ import annotations
 
 DEFAULT_NARRATION_TEXT = "A pause. The creature gathers itself."
@@ -10,7 +16,11 @@ def validate_narration_config(
     max_context_events: int,
     previous_narration_window: int,
 ) -> None:
-    """Validate shared narration knobs for runtime and wrapper entrypoints."""
+    """Validate narration cadence/context bounds shared across entrypoints.
+
+    Raises:
+        ValueError: If any duration/count argument falls outside allowed bounds.
+    """
 
     if narration_interval_seconds <= 0:
         raise ValueError("narration_interval_seconds must be positive")

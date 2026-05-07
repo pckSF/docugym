@@ -1,3 +1,9 @@
+"""Prompt-tuning utilities for collecting comparable narration samples.
+
+These helpers run lightweight stepping loops and capture narration latency/output
+pairs so prompt and model changes can be evaluated with repeatable frame samples.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,15 +18,34 @@ from docugym.narrator import NarrationContext
 
 
 class SyncNarrator(Protocol):
-    """Minimal sync narrator interface used by prompt tuning helpers."""
+    """Minimal sync narrator interface used by prompt-tuning helpers.
+
+    This protocol keeps tuning utilities decoupled from concrete narrator client
+    implementations.
+    """
 
     def narrate_frame_sync(self, frame: np.ndarray, context: NarrationContext) -> str:
-        """Return narration text for a single frame and context payload."""
+        """Return narration text for one frame and context payload.
+
+        Args:
+            frame: RGB/RGBA frame selected for tuning output.
+            context: Continuity and event context payload.
+
+        Returns:
+            Narration text for the sampled frame.
+        """
 
 
 @dataclass(slots=True)
 class PromptTuningSample:
-    """One narrated sample emitted by the prompt tuning command."""
+    """One narrated sample emitted by prompt-tuning workflows.
+
+    Attributes:
+        step: Global rendered step index for the sampled frame.
+        reward: Reward observed at sampling time.
+        narration: Generated narration text.
+        latency_ms: End-to-end narration latency in milliseconds.
+    """
 
     step: int
     reward: float
@@ -35,6 +60,12 @@ def _choose_action(
     scripted_agent: ScriptedAgent | None,
     policy: Policy | None,
 ) -> Any:
+    """Choose an action source with deterministic precedence.
+
+    Prompt-tuning runs use policy actions when available, then scripted heuristics,
+    and finally random actions so sample collection behavior is predictable.
+    """
+
     if policy is not None:
         action, _ = policy.predict(observation, deterministic=True)
         return action
@@ -62,7 +93,36 @@ def run_prompt_tuning(
     sb3_device: str = "cpu",
     env_kwargs: dict[str, Any] | None = None,
 ) -> list[PromptTuningSample]:
-    """Collect frame samples and generate narration text for prompt A/B tuning."""
+    """Collect narrated samples at fixed step intervals for tuning analysis.
+
+    Each sample stores the rendered step index, latest reward signal, narration
+    text, and measured latency so users can compare quality/cost trade-offs across
+    prompt revisions.
+
+    Args:
+        env_id: Gymnasium environment id.
+        seed: Reset/action-space seed.
+        samples: Number of narration samples to collect.
+        step_stride: Number of env steps between sampled frames.
+        narrator: Sync narrator implementation.
+        agent_kind: Action source kind.
+        sb3_repo_id: SB3 repository id when ``agent_kind='sb3'``.
+        sb3_filename: SB3 artifact filename when ``agent_kind='sb3'``.
+        trusted_repo_prefixes: Trusted SB3 repository prefix allowlist.
+        enforce_trusted_repo: Whether untrusted repo ids raise instead of warn.
+        sb3_revision: Optional SB3 revision pin.
+        sb3_algorithm: Optional explicit SB3 algorithm override.
+        sb3_device: SB3 device string.
+        env_kwargs: Optional kwargs forwarded to ``gym.make``.
+
+    Returns:
+        Ordered list of tuning samples.
+
+    Raises:
+        ValueError: If sample/stride bounds are invalid or SB3 options are
+            missing.
+        TypeError: If env render output is not ``numpy.ndarray``.
+    """
 
     if samples <= 0:
         raise ValueError("samples must be a positive integer")

@@ -34,7 +34,7 @@ class FakeStderr(BytesIO):
         super().__init__(b"warning line\n")
         self.read_calls = 0
 
-    def read(self, size: int = -1) -> bytes:
+    def read(self, size: int | None = -1, /) -> bytes:
         self.read_calls += 1
         return super().read(size)
 

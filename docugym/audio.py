@@ -1,3 +1,9 @@
+"""Audio playback primitives for low-latency narration streaming.
+
+The output implementation is queue-backed and drop-oldest by design so live
+gameplay remains responsive when synthesis produces audio faster than playback.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,13 +21,25 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class AudioStats:
-    """Runtime counters for audio queue behavior."""
+    """Runtime counters describing audio backpressure behavior.
+
+    Attributes:
+        dropped_chunks: Number of chunks dropped because playback could not keep up
+            with producer enqueue rate.
+    """
 
     dropped_chunks: int = 0
 
 
 class AudioOutput:
-    """Queue-backed sounddevice output stream for low-latency mono playback."""
+    """Queue-backed ``sounddevice`` output stream for mono narration playback.
+
+    The class intentionally favors fresh chunks under load by dropping oldest queue
+    entries instead of blocking producer threads.
+
+    Callers should treat this as a best-effort real-time sink rather than a strict
+    lossless audio transport.
+    """
 
     def __init__(
         self,
@@ -50,12 +68,24 @@ class AudioOutput:
 
     @property
     def stats(self) -> AudioStats:
-        """Return runtime audio queue counters."""
+        """Return live queue and drop counters for diagnostics.
+
+        Returns:
+            Mutable stats object updated during playback.
+        """
 
         return self._stats
 
     def start(self) -> None:
-        """Start the underlying sounddevice output stream."""
+        """Start the underlying ``sounddevice`` output stream.
+
+        Raises:
+            RuntimeError: If ``sounddevice`` is unavailable in the runtime
+                environment.
+
+        Notes:
+            Multiple calls are safe; stream initialization happens once.
+        """
 
         if self._stream is not None:
             return
@@ -79,7 +109,11 @@ class AudioOutput:
         self._stream.start()
 
     def stop(self) -> None:
-        """Stop and close the output stream if it is active."""
+        """Stop and close the output stream if it is active.
+
+        This method is idempotent and safe to call during teardown paths that may
+        run more than once.
+        """
 
         if self._stream is None:
             return
@@ -92,6 +126,10 @@ class AudioOutput:
         """Queue a mono float32 chunk for callback playback.
 
         Oldest chunks are dropped when the queue is full to prioritize fresh audio.
+
+        Args:
+            chunk: One-dimensional audio chunk or array-like payload that can be
+                reshaped to mono ``float32`` samples.
         """
 
         normalized = np.asarray(chunk, dtype=np.float32).reshape(-1)
@@ -104,7 +142,11 @@ class AudioOutput:
             logger.debug("Dropped audio chunk due to sustained queue pressure")
 
     def clear(self) -> None:
-        """Drop pending queued and buffered audio chunks immediately."""
+        """Drop queued and buffered audio immediately.
+
+        Useful for mute toggles and pause transitions where stale speech should not
+        continue playing.
+        """
 
         self._pending = np.empty(0, dtype=np.float32)
         while True:

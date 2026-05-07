@@ -4,7 +4,7 @@ tags: [code-review, remediation, performance, runtime, recording, narrator, wrap
 created: 2026-05-07
 updated: 2026-05-07
 status: active
-related: [2026-05-07-code-review-idiomatic-and-performance-issues.md]
+related: [2026-05-07-code-review-idiomatic-and-performance-issues.md, 2026-05-07-docstring-standardization-pass.md]
 ---
 # Code Review Remediation Scope
 
@@ -176,3 +176,5 @@ The following audit items remain intentionally open:
   related cdoc decisions, implementation modules, and targeted tests.
 - 2026-05-07: Updated with implemented remediation outcomes, added tests, and
   explicit deferrals after pre-commit validation passed.
+- 2026-05-07: Linked the docstring-standardization log note for documentation
+  quality follow-up traceability.

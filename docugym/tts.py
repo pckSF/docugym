@@ -1,3 +1,9 @@
+"""Text-to-speech adapters used for sentence-level narration playback.
+
+The module exposes async and sync entrypoints while keeping sentence boundaries so
+subtitles can track spoken chunks instead of whole-paragraph narration text.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -15,14 +21,26 @@ _SENTENCE_ABBREVIATIONS: tuple[str, ...] = ("Mr.", "Mrs.", "Ms.", "Dr.")
 
 @dataclass(slots=True)
 class SpeechSentence:
-    """Sentence-level synthesis output for subtitle and audio playback."""
+    """Sentence-level synthesis output for subtitle and audio playback.
+
+    Attributes:
+        graphemes: Subtitle text corresponding to this synthesized sentence.
+        chunks: Ordered mono audio chunks for this sentence.
+    """
 
     graphemes: str
     chunks: list[np.ndarray]
 
 
 class KokoroTTS:
-    """Kokoro-backed TTS engine that yields sentence-level audio chunks."""
+    """Kokoro-backed TTS engine that emits sentence-grouped audio chunks.
+
+    Sentence grouping preserves subtitle coherence and allows runtime code to react
+    between sentences (for example, mute toggles or shutdown events).
+
+    The implementation lazily initializes the Kokoro pipeline to keep import-time
+    costs low for subtitle-only workflows.
+    """
 
     def __init__(
         self,
@@ -46,14 +64,25 @@ class KokoroTTS:
         self._pipeline: Any | None = None
 
     async def speak(self, text: str) -> AsyncIterator[SpeechSentence]:
-        """Asynchronously synthesize text into sentence-level audio outputs."""
+        """Asynchronously synthesize narration text into sentence outputs.
+
+        Args:
+            text: Narration text to synthesize.
+
+        Returns:
+            Async iterator yielding sentence-level subtitle/audio payloads.
+        """
 
         sentences = await asyncio.to_thread(self._synthesize_sentences, text)
         for sentence in sentences:
             yield sentence
 
     def speak_sync(self, text: str) -> list[SpeechSentence]:
-        """Synchronous wrapper around ``speak`` for non-async runtime loops."""
+        """Synchronous wrapper around :meth:`speak` for thread-based callers.
+
+        Raises:
+            RuntimeError: If called from a running event loop.
+        """
 
         async def _collect() -> list[SpeechSentence]:
             return [sentence async for sentence in self.speak(text)]

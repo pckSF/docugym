@@ -1,3 +1,9 @@
+"""FFmpeg-backed recording utilities for synchronized gameplay session capture.
+
+The recorder streams video frames and mirrors narration audio into an aligned PCM
+track, then muxes both streams into a final MP4 artifact at session shutdown.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -22,6 +28,9 @@ class FFmpegSessionRecorder:
     Frames are streamed to ffmpeg as raw ``rgb24`` video while narration chunks are
     mirrored into a timestamp-aligned float32 mono PCM buffer. At shutdown, the
     encoded video and synthesized PCM track are muxed into a final MP4 file.
+
+    The recorder is resilient to variable-latency narration chunks by inserting
+    silence so the output timeline aligns with session timestamps.
     """
 
     def __init__(
@@ -64,7 +73,15 @@ class FFmpegSessionRecorder:
         self._closed = False
 
     def write_video_frame(self, frame: np.ndarray) -> None:
-        """Append one rendered frame to the recording stream."""
+        """Append one rendered frame to the recording stream.
+
+        Args:
+            frame: RGB/RGBA frame with shape ``(H, W, C)``.
+
+        Raises:
+            RuntimeError: If recorder is closed or ffmpeg process is unavailable.
+            ValueError: If frame shape changes mid-session.
+        """
 
         if self._closed:
             raise RuntimeError("Cannot write video frame after recorder closure")
@@ -94,7 +111,16 @@ class FFmpegSessionRecorder:
         self._frame_count += 1
 
     def write_audio_chunk(self, chunk: np.ndarray, *, timestamp: float) -> None:
-        """Mirror one narration chunk into the recording audio timeline."""
+        """Mirror one narration chunk into the recording audio timeline.
+
+        Args:
+            chunk: Mono audio samples for one synthesized chunk.
+            timestamp: Monotonic timestamp associated with chunk emission.
+
+        Notes:
+            Calls after recorder closure are ignored so teardown paths can remain
+            straightforward.
+        """
 
         if self._closed:
             return
@@ -112,7 +138,14 @@ class FFmpegSessionRecorder:
         self._audio_samples_written += int(normalized.size)
 
     def close(self, *, end_timestamp: float) -> Path | None:
-        """Finalize recording files and return output path when available."""
+        """Finalize recording and return saved output path when available.
+
+        Args:
+            end_timestamp: Monotonic end timestamp used for timeline padding.
+
+        Returns:
+            Output MP4 path when frames were recorded; otherwise ``None``.
+        """
 
         if self._closed:
             return self._out_path if self._out_path.exists() else None

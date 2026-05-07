@@ -1,3 +1,10 @@
+"""Synchronous Gym wrapper that adds narration, subtitles, and optional TTS.
+
+Unlike the canonical async runtime, this module keeps a Gym-style ``step`` API and
+moves narration work to a background thread so existing reinforcement-learning
+loops can adopt narration without rewriting control flow.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -62,6 +69,8 @@ class _WrapperStats:
 
 
 def _resolve_env_id(env: gym.Env[Any, Any], env_id: str | None) -> str:
+    """Resolve a stable environment id for logs and narration context."""
+
     if env_id:
         return env_id
 
@@ -74,7 +83,26 @@ def _resolve_env_id(env: gym.Env[Any, Any], env_id: str | None) -> str:
 
 
 class DocuWrapper(gym.Wrapper):
-    """Gym wrapper that overlays live narration, subtitles, and optional voice."""
+    """Gym wrapper that adds narration, subtitles, and optional spoken audio.
+
+    ``DocuWrapper`` is the synchronous integration surface for callers that already
+    rely on Gym's ``reset``/``step`` control flow and cannot move orchestration to
+    ``asyncio``. It preserves caller-driven stepping while offloading narration and
+    optional TTS to a background worker thread.
+
+    Compared with the async runtime pipeline, this wrapper:
+    - keeps action selection and stepping in the caller thread,
+    - computes keyframe eligibility inline during ``step``,
+    - performs narration synthesis in a background thread, and
+    - exposes live diagnostics through :meth:`state` and ``info['docugym']``.
+
+    Example:
+        env = gym.make("CartPole-v1", render_mode="rgb_array")
+        wrapped = DocuWrapper(env, voice_enabled=False)
+        obs, info = wrapped.reset(seed=42)
+        action = env.action_space.sample()
+        obs, reward, terminated, truncated, info = wrapped.step(action)
+    """
 
     def __init__(
         self,
@@ -114,6 +142,60 @@ class DocuWrapper(gym.Wrapper):
         on_audio_chunk: AudioChunkCallback | None = None,
         on_status: StatusCallback | None = None,
     ) -> None:
+        """Initialize narration, display, and optional voice collaborators.
+
+        Args:
+            env: Wrapped Gymnasium environment configured with
+                ``render_mode='rgb_array'``.
+            env_id: Optional environment id override used for logging/context.
+                When omitted, the value is inferred from ``env.spec.id``.
+            fps: Target display refresh rate.
+            window_scale: Integer factor used to upscale rendered frames.
+            subtitle_font: Font family used for subtitle and HUD text.
+            subtitle_size: Base subtitle font size in pixels.
+            subtitle_max_text_width: Maximum subtitle wrapping width in pixels.
+            hud: Whether to render the status HUD.
+            text_bands: Whether subtitle/HUD should use dedicated text bands.
+            min_window_width: Minimum window width used for narrow environments.
+            narrator: Optional injected narrator client. Defaults to ``VLMNarrator``.
+            base_url: VLM endpoint base URL when ``narrator`` is not injected.
+            model: VLM model identifier.
+            max_tokens: Narration completion token limit.
+            temperature: Narration sampling temperature.
+            top_p: Nucleus sampling parameter.
+            image_detail: Image payload detail level for VLM requests.
+            narration_interval_seconds: Baseline cadence trigger interval.
+            min_gap_seconds: Cooldown between accepted narration requests.
+            reward_spike_threshold: Absolute reward threshold that triggers
+                narration.
+            pixel_delta_threshold: Mean pixel-delta threshold that triggers
+                narration.
+            max_context_events: Number of recent event summaries retained for
+                narration context.
+            previous_narration_window: Number of previous narrations retained for
+                continuity context.
+            voice_enabled: Whether spoken narration should be produced.
+            tts_engine: TTS backend selector. Currently only ``"kokoro"`` is
+                supported.
+            tts_voice: Kokoro voice id used when voice is enabled.
+            tts_speed: Kokoro speed multiplier.
+            tts_sample_rate: Audio sample rate for playback.
+            speaker: Optional injected speaker implementation.
+            audio_output: Optional injected audio sink.
+            on_narration: Optional callback invoked per narration result as
+                ``(text, step, latency_ms)``.
+            on_subtitle: Optional callback invoked for subtitle updates.
+            on_audio_chunk: Optional callback invoked per emitted audio chunk.
+            on_status: Optional callback invoked with the current state payload
+                after frame rendering.
+
+        Raises:
+            ValueError: If narration config is invalid or an unsupported
+                ``tts_engine`` is requested.
+            RuntimeError: If voice is enabled but the configured audio backend
+                cannot be started.
+        """
+
         super().__init__(env)
 
         validate_narration_config(
@@ -208,7 +290,19 @@ class DocuWrapper(gym.Wrapper):
         seed: int | None = None,
         options: dict[str, Any] | None = None,
     ) -> tuple[Any, dict[str, Any]]:
-        """Reset wrapped environment and draw the first narrated frame."""
+        """Reset the wrapped env and re-prime wrapper narration state.
+
+        The wrapper resets cadence state, captures the first frame, and primes the
+        keyframe selector so visual-delta triggers compare against a known baseline.
+
+        Args:
+            seed: Optional Gym reset seed.
+            options: Optional Gym reset options mapping.
+
+        Returns:
+            Standard Gym ``(observation, info)`` tuple where ``info`` includes a
+            ``docugym`` diagnostics payload.
+        """
 
         self._ensure_open()
         self._start_worker_if_needed()
@@ -233,7 +327,23 @@ class DocuWrapper(gym.Wrapper):
         return observation, self._augment_info(info)
 
     def step(self, action: Any) -> tuple[Any, float, bool, bool, dict[str, Any]]:
-        """Step wrapped environment while updating narration and subtitle state."""
+        """Step the environment while updating narration and display pipelines.
+
+        This method preserves Gym semantics while opportunistically enqueueing
+        narration candidates, applying keyboard-driven actions, and embedding a
+        ``docugym`` status payload into the returned ``info`` mapping.
+
+        Args:
+            action: Environment action selected by caller-side policy logic.
+
+        Returns:
+            Gym ``(observation, reward, terminated, truncated, info)`` tuple with
+            ``info['docugym']`` containing wrapper runtime state.
+
+        Notes:
+            If the display window is closed, this method forces ``truncated=True``
+            to preserve a clean Gym termination signal.
+        """
 
         self._ensure_open()
         self._hold_if_paused()
@@ -273,7 +383,13 @@ class DocuWrapper(gym.Wrapper):
         )
 
     def close(self) -> None:
-        """Stop wrapper background workers and close wrapped resources."""
+        """Shut down worker, audio, and display resources idempotently.
+
+        Safe to call multiple times; subsequent calls become no-ops.
+
+        This method joins the background narration worker, stops optional audio
+        playback, and closes both display and wrapped environment resources.
+        """
 
         if self._closed:
             return
@@ -292,7 +408,13 @@ class DocuWrapper(gym.Wrapper):
         self.env.close()
 
     def state(self) -> dict[str, Any]:
-        """Return current wrapper runtime state and narration counters."""
+        """Return the current wrapper diagnostics payload.
+
+        Returns:
+            Mapping containing step/reward counters, narration-drop metrics, latest
+            narration/subtitle text, pause/mute/narrating flags, window state, and
+            voice mode.
+        """
 
         with self._stats_lock:
             payload = {
@@ -652,6 +774,17 @@ class DocuWrapper(gym.Wrapper):
 
 
 def docuwrapper(env: gym.Env[Any, Any], **kwargs: Any) -> DocuWrapper:
-    """Return a Gym-compatible DocuWrapper around an existing environment."""
+    """Factory alias mirroring Gym's wrapper-construction style.
+
+    This helper allows call sites to pass ``docuwrapper`` as a wrapper factory in
+    places that expect a plain callable instead of direct class construction.
+
+    Args:
+        env: Wrapped Gymnasium environment instance.
+        **kwargs: Keyword arguments forwarded to :class:`DocuWrapper`.
+
+    Returns:
+        Configured :class:`DocuWrapper` instance.
+    """
 
     return DocuWrapper(env=env, **kwargs)

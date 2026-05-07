@@ -1,3 +1,9 @@
+"""Typer-powered CLI for smoke tests, live runs, and prompt-tuning workflows.
+
+Command handlers merge CLI overrides with YAML defaults so the same runtime
+configuration model can be used interactively and in scripted environments.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -70,19 +76,32 @@ _PRESET_NAMES: tuple[str, ...] = ("atari", "lunarlander", "carracing")
 
 @dataclass(slots=True)
 class AppState:
-    """Shared CLI runtime state."""
+    """Shared CLI runtime state passed through Typer context.
+
+    Attributes:
+        settings: Effective application settings after source merging.
+        config_path: Configuration file path used to build ``settings``.
+    """
 
     settings: AppSettings
     config_path: Path
 
 
 def _get_state(ctx: typer.Context) -> AppState:
+    """Return initialized CLI state or fail with a user-facing error."""
+
     if not isinstance(ctx.obj, AppState):
         raise typer.BadParameter("Application state is not initialized.")
     return ctx.obj
 
 
 def _parse_env_kwargs(value: str | None) -> dict[str, Any]:
+    """Parse ``--env-kwargs`` JSON into ``gym.make`` kwargs.
+
+    The option must decode to a JSON object so downstream env creation receives a
+    mapping, not list/primitive values.
+    """
+
     if value is None:
         return {}
 
@@ -98,6 +117,8 @@ def _parse_env_kwargs(value: str | None) -> dict[str, Any]:
 
 
 def _load_preset_settings(config_path: Path) -> AppSettings:
+    """Load one preset YAML file into validated application settings."""
+
     raw_data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if raw_data is None:
         raw_data = {}
@@ -120,7 +141,11 @@ def main(
     ),
     log_level: str = typer.Option("INFO", help="Python logging level."),
 ) -> None:
-    """Initialize application configuration and logging."""
+    """Initialize CLI process state before any subcommand executes.
+
+    The callback configures logging and stores validated settings in ``ctx.obj`` so
+    subcommands can share one consistent configuration source.
+    """
 
     configure_logging(log_level)
     settings = load_settings(config)
@@ -130,7 +155,11 @@ def main(
 
 @app.command("show-config")
 def show_config(ctx: typer.Context) -> None:
-    """Print the effective configuration as pretty JSON."""
+    """Print effective configuration as formatted JSON.
+
+    Args:
+        ctx: Typer context carrying shared application state.
+    """
 
     settings = _get_state(ctx).settings
     typer.echo(json.dumps(settings.model_dump(mode="json"), indent=2))
@@ -138,7 +167,10 @@ def show_config(ctx: typer.Context) -> None:
 
 @app.command("list-voices")
 def list_voices() -> None:
-    """Print Kokoro's supported British voices with short sample lines."""
+    """Print curated Kokoro British voice ids with sample phrases.
+
+    This command is a quick discovery surface for choosing ``--tts-voice`` values.
+    """
 
     typer.echo("Kokoro British voices:")
     for voice_id, sample in _KOKORO_BRITISH_VOICE_SAMPLES:
@@ -147,7 +179,11 @@ def list_voices() -> None:
 
 @app.command("list-envs")
 def list_envs() -> None:
-    """Print environment presets shipped in configs/."""
+    """List packaged presets with resolved env id, agent kind, and policy hint.
+
+    Presets are loaded through the same settings model used by runtime commands so
+    this output mirrors effective default behavior.
+    """
 
     config_dir = Path("configs")
     typer.echo("Supported env presets:")
@@ -214,7 +250,17 @@ def smoketest(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Run a local smoke test and persist rendered frames to disk."""
+    """Capture a short rendered-frame sequence for setup verification.
+
+    CLI-provided values override config defaults, while ``--env-kwargs`` are merged
+    on top of config-provided env kwargs for the selected environment.
+
+    Args:
+        ctx: Typer context carrying shared settings.
+
+    Raises:
+        typer.BadParameter: If ``--env-kwargs`` is not valid JSON object input.
+    """
 
     state = _get_state(ctx)
     config = state.settings
@@ -307,7 +353,17 @@ def display_smoketest(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Run the live display loop with a random agent."""
+    """Run display-only smoke validation with merged config and CLI overrides.
+
+    This command intentionally excludes narration/TTS so display layout, FPS pacing,
+    and keyboard controls can be verified independently.
+
+    Args:
+        ctx: Typer context carrying shared settings.
+
+    Raises:
+        typer.BadParameter: If ``--env-kwargs`` is not valid JSON object input.
+    """
 
     state = _get_state(ctx)
     config = state.settings
@@ -477,7 +533,19 @@ def run(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Run the async narration pipeline with keyframe selection."""
+    """Run the full narrated session pipeline from CLI configuration.
+
+    This command is the primary local entrypoint: it resolves effective options,
+    optionally waits for the VLM endpoint, then executes the async runtime through
+    its synchronous wrapper.
+
+    Args:
+        ctx: Typer context carrying shared settings.
+
+    Raises:
+        typer.Exit: If ``--wait-for-vlm`` is enabled and readiness times out.
+        typer.BadParameter: If ``--env-kwargs`` is not valid JSON object input.
+    """
 
     state = _get_state(ctx)
     config = state.settings
@@ -675,7 +743,18 @@ def tune_prompt(
         help="JSON object of extra kwargs passed to gym.make().",
     ),
 ) -> None:
-    """Generate multiple narrations over varied frames for prompt tuning."""
+    """Collect narrated frame samples for prompt-quality comparison runs.
+
+    The command advances the environment in fixed strides, narrates sampled frames,
+    and prints latency plus narration text for side-by-side prompt iteration.
+
+    Args:
+        ctx: Typer context carrying shared settings.
+
+    Raises:
+        typer.Exit: If ``--wait-for-vlm`` is enabled and readiness times out.
+        typer.BadParameter: If ``--env-kwargs`` is not valid JSON object input.
+    """
 
     state = _get_state(ctx)
     config = state.settings

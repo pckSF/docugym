@@ -1,3 +1,9 @@
+"""Environment factories, lightweight agents, and SB3 policy loading helpers.
+
+Both CLI smoke tests and live runtime paths use this module to keep environment
+construction and trusted-policy loading behavior consistent.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -15,7 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 class Policy(Protocol):
-    """Minimal policy protocol for Stable-Baselines3-compatible inference."""
+    """Minimal policy protocol for Stable-Baselines3-compatible inference.
+
+    Implementations return ``(action, recurrent_state)`` tuples compatible with
+    DocuGym runtime/wrapper stepping loops.
+    """
 
     def predict(
         self,
@@ -24,31 +34,66 @@ class Policy(Protocol):
         episode_start: Any | None = None,
         deterministic: bool = True,
     ) -> tuple[Any, Any | None]:
-        """Return an action and optional recurrent state for an observation."""
+        """Return an action and optional recurrent state for an observation.
+
+        Args:
+            observation: Current environment observation.
+            state: Optional recurrent-policy state.
+            episode_start: Optional episode-start flag payload.
+            deterministic: Whether policy should act deterministically.
+
+        Returns:
+            Tuple of ``(action, next_state)``.
+        """
 
 
 class RandomAgent:
-    """Agent that samples actions directly from the environment action space."""
+    """Agent that samples actions from the environment action space.
+
+    This agent is intentionally stateless and is used as the baseline fallback in
+    smoke tests and runtime degradation paths.
+    """
 
     def __init__(self, env: Any) -> None:
         self._env = env
 
     def act(self, observation: Any) -> Any:
-        """Sample an action from the environment action space."""
+        """Sample one action from the environment action space.
+
+        Args:
+            observation: Unused observation payload kept for interface parity.
+
+        Returns:
+            Environment action sampled from ``action_space``.
+        """
 
         del observation
         return self._env.action_space.sample()
 
 
 class ScriptedAgent:
-    """Simple heuristic agent for quick smoke checks in known environments."""
+    """Tiny deterministic policy used for reproducible smoke-test behavior.
+
+    The heuristics are intentionally narrow and fallback to random actions for
+    unsupported environments.
+
+    Currently includes deterministic policies for ``MountainCar-v0`` and
+    ``CartPole-v1`` smoke-test behavior.
+    """
 
     def __init__(self, env_id: str, fallback: RandomAgent | None = None) -> None:
         self._env_id = env_id
         self._fallback = fallback
 
     def act(self, observation: Any) -> int:
-        """Return a deterministic action for supported envs or fallback action."""
+        """Return a deterministic action for known envs or fallback action.
+
+        Args:
+            observation: Current observation used by environment-specific heuristics.
+
+        Returns:
+            Integer action id.
+        """
 
         if self._env_id == "MountainCar-v0":
             # Always accelerate right to provide deterministic smoke-test behavior.
@@ -69,7 +114,22 @@ def make_env(
     seed: int,
     env_kwargs: dict[str, Any] | None = None,
 ) -> gym.Env[Any, Any]:
-    """Create and seed an RGB-array Gymnasium environment."""
+    """Create a seeded ``rgb_array`` Gymnasium environment instance.
+
+    Atari ids trigger lazy ALE registration so users do not need a separate
+    registration step in CLI or runtime call paths.
+
+    Args:
+        env_id: Gymnasium environment id.
+        seed: Reset/action-space seed.
+        env_kwargs: Optional kwargs forwarded to ``gym.make``.
+
+    Returns:
+        Seeded environment configured for ``render_mode='rgb_array'``.
+
+    Raises:
+        RuntimeError: If ALE support is required but not installed.
+    """
 
     if env_id.startswith("ALE/"):
         try:
@@ -92,6 +152,8 @@ def _resolve_cached_policy_path(
     filename: str,
     revision: str | None = None,
 ) -> Path:
+    """Build a deterministic cache path for one downloaded SB3 policy file."""
+
     repo_dir = repo_id.replace("/", "--")
     if revision:
         revision_dir = revision.replace("/", "--")
@@ -105,6 +167,12 @@ def _download_policy(
     destination: Path,
     revision: str | None = None,
 ) -> Path:
+    """Download one policy artifact and store it at the canonical cache path.
+
+    ``huggingface_hub`` may return a path in its own cache tree; this function
+    mirrors the file into DocuGym's cache layout so later lookups are stable.
+    """
+
     if destination.exists():
         return destination
 
@@ -134,6 +202,16 @@ def _load_policy_from_path(
     algorithm: str | None = None,
     device: str = "cpu",
 ) -> Policy:
+    """Load an SB3 policy checkpoint from disk.
+
+    If ``algorithm`` is omitted, the loader infers it from the filename prefix to
+    preserve compatibility with standard SB3 artifact naming.
+
+    Raises:
+        ValueError: If no supported SB3 loader matches the algorithm prefix.
+        RuntimeError: If Stable-Baselines3 is not installed.
+    """
+
     algo_name = (algorithm or filename.split("-", maxsplit=1)[0]).lower()
 
     try:
@@ -166,6 +244,8 @@ def _load_policy_from_path(
 def _normalize_repo_prefixes(
     trusted_repo_prefixes: Sequence[str] | None,
 ) -> tuple[str, ...]:
+    """Return cleaned trust prefixes, falling back to project defaults."""
+
     if trusted_repo_prefixes is None:
         return DEFAULT_TRUSTED_SB3_REPO_PREFIXES
 
@@ -176,6 +256,8 @@ def _normalize_repo_prefixes(
 
 
 def _is_trusted_repo(repo_id: str, trusted_prefixes: tuple[str, ...]) -> bool:
+    """Check whether a repo id starts with one of the configured trust prefixes."""
+
     return any(repo_id.startswith(prefix) for prefix in trusted_prefixes)
 
 
@@ -193,6 +275,22 @@ def load_sb3_policy(
 
     Stable-Baselines3 policy loading deserializes model artifacts. Loading an
     untrusted policy can execute arbitrary code during deserialization.
+
+    Args:
+        repo_id: Hugging Face repository id.
+        filename: Policy artifact filename within the repository.
+        trusted_repo_prefixes: Optional allowlist of trusted repo id prefixes.
+        enforce_trusted_repo: Whether untrusted repos raise instead of warn.
+        revision: Optional repository revision pin.
+        algorithm: Optional explicit SB3 algorithm name.
+        device: Device string forwarded to SB3 loader.
+
+    Returns:
+        Loaded SB3-compatible policy object.
+
+    Raises:
+        ValueError: If trust checks fail or algorithm is unsupported.
+        RuntimeError: If download or SB3 dependencies are unavailable.
     """
 
     trusted_prefixes = _normalize_repo_prefixes(trusted_repo_prefixes)
@@ -225,6 +323,8 @@ def load_sb3_policy(
 
 
 def _save_frame_png(frame: np.ndarray, path: Path) -> None:
+    """Write one smoke-test frame to disk as a PNG image."""
+
     try:
         from PIL import Image
     except ImportError as exc:  # pragma: no cover - depends on optional install
@@ -252,7 +352,34 @@ def run_smoketest(
     sb3_algorithm: str | None = None,
     sb3_device: str = "cpu",
 ) -> list[Path]:
-    """Step an environment and persist rendered frames for smoke validation."""
+    """Run a fixed-length smoke test and save rendered frame PNGs.
+
+    This is primarily a validation helper for confirming environment creation,
+    policy loading, and render-mode behavior in CI and local setup checks.
+
+    Args:
+        env_id: Gymnasium environment id.
+        seed: Reset/action-space seed.
+        steps: Number of frames to capture.
+        out_dir: Output directory for PNG frame artifacts.
+        env_kwargs: Optional kwargs forwarded to ``gym.make``.
+        agent_kind: Action source (``random``, ``scripted``, or ``sb3``).
+        sb3_repo_id: SB3 repository id when ``agent_kind='sb3'``.
+        sb3_filename: SB3 artifact filename when ``agent_kind='sb3'``.
+        trusted_repo_prefixes: Optional trusted repo prefix allowlist.
+        enforce_trusted_repo: Whether untrusted repos raise instead of warn.
+        sb3_revision: Optional SB3 repository revision pin.
+        sb3_algorithm: Optional explicit SB3 algorithm override.
+        sb3_device: SB3 loader device string.
+
+    Returns:
+        Ordered list of saved frame paths.
+
+    Raises:
+        ValueError: If ``steps`` is non-positive or required SB3 options are
+            missing.
+        TypeError: If environment render output is not ``numpy.ndarray``.
+    """
 
     if steps <= 0:
         raise ValueError("steps must be a positive integer")

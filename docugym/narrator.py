@@ -1,3 +1,10 @@
+"""Vision-language narration client used by runtime and wrapper pipelines.
+
+The module encapsulates prompt construction, image payload encoding, and OpenAI-
+compatible HTTP calls so orchestration code can request narration with a small,
+stable interface.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +43,13 @@ SYSTEM_PROMPT = dedent(
 
 @dataclass(slots=True)
 class NarrationContext:
-    """Context fields sent alongside a frame for continuity-aware narration."""
+    """Continuity fields supplied with each narration request.
+
+    Attributes:
+        env_human_name: Human-readable scene name used in the prompt context.
+        previous_narration: Most recent narration text for continuity.
+        event_summary: Compact summary of recent events/triggers.
+    """
 
     env_human_name: str
     previous_narration: str = ""
@@ -44,7 +57,21 @@ class NarrationContext:
 
 
 class VLMNarrator:
-    """OpenAI-compatible multimodal client for frame-to-text narration."""
+    """OpenAI-compatible multimodal narrator for RGB frame inputs.
+
+    Instances are reusable across many narration requests and keep one async client
+    per event loop to benefit from HTTP connection pooling in long sessions.
+
+    Example:
+        narrator = VLMNarrator(
+            base_url="http://localhost:8000/v1",
+            model="Qwen/Qwen3-VL-8B-Instruct-AWQ",
+            max_tokens=80,
+            temperature=0.8,
+            top_p=0.9,
+        )
+        text = await narrator.narrate_frame(frame=frame, context=context)
+    """
 
     def __init__(
         self,
@@ -58,6 +85,22 @@ class VLMNarrator:
         timeout_seconds: float = 30.0,
         readiness_timeout_seconds: float = 5.0,
     ) -> None:
+        """Initialize narrator transport and sampling parameters.
+
+        Args:
+            base_url: OpenAI-compatible HTTP endpoint base URL.
+            model: Model identifier sent to ``/chat/completions``.
+            max_tokens: Completion token cap per narration request.
+            temperature: Sampling temperature.
+            top_p: Nucleus sampling parameter.
+            image_detail: Image detail hint passed to the multimodal endpoint.
+            timeout_seconds: Request timeout for narration calls.
+            readiness_timeout_seconds: Timeout for readiness polling requests.
+
+        Raises:
+            ValueError: If ``base_url`` is not an absolute http(s) URL.
+        """
+
         parsed_base_url = httpx.URL(base_url)
         if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.host:
             raise ValueError("base_url must be an absolute http(s) URL")
@@ -74,7 +117,23 @@ class VLMNarrator:
         self._client_loop: asyncio.AbstractEventLoop | None = None
 
     async def narrate_frame(self, frame: np.ndarray, context: NarrationContext) -> str:
-        """Generate one short narration from an RGB frame and context."""
+        """Generate one narration string from a frame and continuity context.
+
+        The frame is encoded off the event loop, then submitted to an OpenAI-style
+        ``/chat/completions`` endpoint with both system and contextual user prompt
+        content.
+
+        Args:
+            frame: RGB/RGBA frame array with shape ``(H, W, C)``.
+            context: Prompt continuity payload.
+
+        Returns:
+            Narration text, or fallback narration when response content is empty.
+
+        Raises:
+            ValueError: If frame shape/channels are invalid during encoding.
+            httpx.HTTPError: If the backend request fails.
+        """
 
         image_payload = await asyncio.to_thread(self._encode_image_payload, frame)
         payload = {
@@ -105,7 +164,14 @@ class VLMNarrator:
         return normalized or DEFAULT_NARRATION_TEXT
 
     def narrate_frame_sync(self, frame: np.ndarray, context: NarrationContext) -> str:
-        """Synchronous wrapper for callers that are not running an event loop."""
+        """Synchronous narration API for non-async integration points.
+
+        This method intentionally creates a short-lived async client per call to
+        avoid cross-loop reuse hazards in synchronous code paths.
+
+        Raises:
+            RuntimeError: If called from a running event loop.
+        """
 
         async def _run_once() -> str:
             image_payload = await asyncio.to_thread(self._encode_image_payload, frame)
@@ -150,7 +216,21 @@ class VLMNarrator:
         timeout_seconds: float = 60.0,
         poll_interval_seconds: float = 1.0,
     ) -> bool:
-        """Poll /models until the VLM endpoint responds successfully."""
+        """Poll ``/models`` until the VLM endpoint responds with HTTP 200.
+
+        This is intended for startup gating in CLI flows where a sidecar model
+        server may need warm-up time before first narration requests.
+
+        Args:
+            timeout_seconds: Maximum polling duration.
+            poll_interval_seconds: Delay between probes.
+
+        Returns:
+            ``True`` when endpoint readiness is confirmed; otherwise ``False``.
+
+        Raises:
+            ValueError: If ``timeout_seconds`` is non-positive.
+        """
 
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
@@ -171,7 +251,11 @@ class VLMNarrator:
         return False
 
     async def aclose(self) -> None:
-        """Close the persistent async HTTP client, if one was opened."""
+        """Close the persistent async HTTP client if it exists.
+
+        Call this during application shutdown to release pooled connections
+        associated with the active event loop.
+        """
 
         if self._client is not None:
             await self._client.aclose()
@@ -184,7 +268,14 @@ class VLMNarrator:
         timeout_seconds: float = 60.0,
         poll_interval_seconds: float = 1.0,
     ) -> bool:
-        """Synchronous wrapper for endpoint readiness polling."""
+        """Synchronous wrapper around :meth:`wait_until_ready`.
+
+        Raises:
+            RuntimeError: If called while an event loop is running.
+
+        Returns:
+            ``True`` when endpoint readiness is confirmed; otherwise ``False``.
+        """
 
         try:
             asyncio.get_running_loop()
