@@ -82,6 +82,16 @@ adding live DocuGym narration/subtitles and command-like toggles as constructor 
 - Added `tests/test_display_actions.py` to lock transition ordering and
   validated action polling behavior.
 
+### Implemented Phase 6 Outcome
+
+- Extracted shared clip snapshot helpers into `docugym/clips.py`
+  (`save_clip_snapshot`) to centralize PNG/text clip persistence behavior used
+  by interactive shortcut handling.
+- Updated `docugym/runtime.py` and `docugym/wrapper.py` to use the shared clip
+  helper, removing duplicated frame-normalization and file-write logic.
+- Added `tests/test_clips.py` to lock snapshot write behavior for both uint8 and
+  non-uint8 frame inputs.
+
 ## Options Considered
 
 #### Option 1: Keep CLI-only production surface
@@ -132,3 +142,5 @@ recommended production path for recording and full run management.
   between wrapper and canonical runtime paths.
 - 2026-05-07: Updated for Phase 5 refactor that shares display action polling
   and pause/mute transition logic between wrapper and canonical runtime paths.
+- 2026-05-07: Updated for Phase 6 refactor that shares clip snapshot persistence
+  logic between wrapper and canonical runtime paths.

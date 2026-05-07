@@ -3,12 +3,11 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass
-from datetime import UTC, datetime
 import logging
 import math
-from pathlib import Path
 from time import perf_counter
 from typing import (
+    TYPE_CHECKING,
     Any,
     AsyncIterator,
     Callable,
@@ -20,6 +19,7 @@ from typing import (
 
 import numpy as np
 
+from docugym.clips import save_clip_snapshot
 from docugym.display import Display
 from docugym.display_actions import build_action_transitions, poll_display_actions
 from docugym.env import (
@@ -44,6 +44,9 @@ from docugym.queue_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass(slots=True)
@@ -187,35 +190,7 @@ def _clear_audio_buffer(audio_output: AudioOutputClient) -> None:
         clear()
 
 
-def _save_frame_png(frame: np.ndarray, path: Path) -> None:
-    try:
-        from PIL import Image
-    except ImportError as exc:  # pragma: no cover - depends on optional install
-        raise RuntimeError("Pillow is required to save clip snapshots.") from exc
-
-    frame_to_save = frame
-    if frame_to_save.dtype != np.uint8:
-        frame_to_save = np.clip(frame_to_save, 0, 255).astype(np.uint8)
-
-    Image.fromarray(frame_to_save[:, :, :3]).save(path, format="PNG")
-
-
-def _save_clip_snapshot(
-    *,
-    frame: np.ndarray,
-    step: int,
-    narration: str,
-    out_dir: Path = Path("out/clips"),
-) -> tuple[Path, Path]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
-    stem = f"clip-step-{step:06d}-{timestamp}"
-    frame_path = out_dir / f"{stem}.png"
-    narration_path = out_dir / f"{stem}.txt"
-
-    _save_frame_png(frame=frame, path=frame_path)
-    narration_path.write_text(f"{narration.strip()}\n", encoding="utf-8")
-    return frame_path, narration_path
+_save_clip_snapshot = save_clip_snapshot
 
 
 async def _narrate_async(
