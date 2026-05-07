@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.12 \
     python3-dev \
     python3-pip \
-    ssh-client \
     swig \
     zsh && \
     pip3 install uv --break-system-packages && \
