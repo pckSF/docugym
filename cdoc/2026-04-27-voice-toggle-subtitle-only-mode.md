@@ -4,7 +4,7 @@ tags: [narration, tts, subtitles, performance, testing, stage-5]
 created: 2026-04-27
 updated: 2026-04-27
 status: active
-related: [stage-4-vlm-narration-sync.md, stage-3-display-layer.md]
+related: [stage-4-vlm-narration-sync.md, stage-3-display-layer.md, stage-5-local-tts-streaming-audio.md]
 ---
 
 # 2026-04-27 Voice Toggle and Subtitle-Only Mode
@@ -73,3 +73,5 @@ example `tts.enabled`) defaulting to enabled.
 - 2026-04-27: Created decision note requiring toggleable voice output with
   subtitle-only operation for silent use, lower-resource runs, and decoupled
   testing/build flow.
+- 2026-05-07: Linked Stage 5 implementation note documenting runtime wiring
+  for voice toggle and subtitle-only mode.

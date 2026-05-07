@@ -12,6 +12,8 @@ agent:
   kind: "sb3"
   sb3_repo_id: "sb3/ppo-SpaceInvadersNoFrameskip-v4"
   sb3_filename: "ppo-SpaceInvadersNoFrameskip-v4.zip"
+  trusted_repo_prefixes: ["sb3/"]
+  enforce_trusted_repo: false
 
 vlm:
   base_url: "http://localhost:8000/v1"
@@ -30,6 +32,7 @@ narration:
   previous_narration_window: 2
 
 tts:
+  enabled: true
   engine: "kokoro"
   kokoro:
     voice: "bm_george"

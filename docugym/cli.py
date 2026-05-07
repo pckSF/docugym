@@ -104,7 +104,11 @@ def smoketest(
     repo_id: str | None = typer.Option(
         None,
         "--repo-id",
-        help="Hugging Face model repository id for SB3 policy loading.",
+        help=(
+            "Hugging Face model repository id for SB3 policy loading. "
+            "Only trusted repos should be used because SB3 deserialization can "
+            "execute arbitrary code."
+        ),
     ),
     filename: str | None = typer.Option(
         None,
@@ -141,6 +145,8 @@ def smoketest(
         agent_kind=agent,
         sb3_repo_id=effective_repo_id,
         sb3_filename=effective_filename,
+        trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
+        enforce_trusted_repo=config.agent.enforce_trusted_repo,
     )
 
     logger.info(
@@ -314,7 +320,8 @@ def run(
         "--policy",
         help=(
             "SB3 policy repo shorthand (e.g. sb3/ppo-PongNoFrameskip-v4). "
-            "Sets --agent sb3."
+            "Sets --agent sb3. Do not load untrusted policies because SB3 "
+            "deserialization can execute arbitrary code."
         ),
     ),
     repo_id: str | None = typer.Option(
@@ -325,7 +332,18 @@ def run(
     filename: str | None = typer.Option(
         None,
         "--filename",
-        help="Policy filename inside the SB3 Hugging Face repo.",
+        help=(
+            "Policy filename inside the SB3 Hugging Face repo. "
+            "Use only trusted model artifacts."
+        ),
+    ),
+    voice: bool | None = typer.Option(
+        None,
+        "--voice/--no-voice",
+        help=(
+            "Enable spoken narration audio. Use --no-voice for subtitle-only "
+            "narration mode."
+        ),
     ),
     wait_for_vlm: bool = typer.Option(
         False,
@@ -369,6 +387,7 @@ def run(
     effective_text_bands = (
         config.display.text_bands if text_bands is None else text_bands
     )
+    effective_voice = config.tts.enabled if voice is None else voice
 
     effective_agent = config.agent.kind if agent is None else agent
     effective_repo_id = repo_id or config.agent.sb3_repo_id
@@ -424,6 +443,13 @@ def run(
         agent_kind=effective_agent,
         sb3_repo_id=effective_repo_id,
         sb3_filename=effective_filename,
+        trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
+        enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        voice_enabled=effective_voice,
+        tts_engine=config.tts.engine,
+        tts_voice=config.tts.kokoro.voice,
+        tts_speed=config.tts.kokoro.speed,
+        tts_sample_rate=config.tts.kokoro.sample_rate,
         max_steps=steps,
     )
 

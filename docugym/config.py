@@ -30,6 +30,8 @@ class AgentSettings(BaseModel):
     kind: Literal["sb3", "random", "scripted"] = "sb3"
     sb3_repo_id: str = "sb3/ppo-SpaceInvadersNoFrameskip-v4"
     sb3_filename: str = "ppo-SpaceInvadersNoFrameskip-v4.zip"
+    trusted_repo_prefixes: list[str] = Field(default_factory=lambda: ["sb3/"])
+    enforce_trusted_repo: bool = False
 
 
 class VLMSettings(BaseModel):
@@ -71,6 +73,7 @@ class XTTSSettings(BaseModel):
 class TTSSettings(BaseModel):
     """Text-to-speech backend configuration."""
 
+    enabled: bool = True
     engine: Literal["kokoro", "xtts", "chatterbox"] = "kokoro"
     kokoro: KokoroSettings = Field(default_factory=KokoroSettings)
     xtts: XTTSSettings = Field(default_factory=XTTSSettings)

@@ -462,3 +462,63 @@ vlm:
     assert captured["agent_kind"] == "sb3"
     assert captured["sb3_repo_id"] == "sb3/ppo-PongNoFrameskip-v4"
     assert captured["sb3_filename"] == "ppo-PongNoFrameskip-v4.zip"
+
+
+def test_run_no_voice_flag_enables_subtitle_only_mode(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+    env_id: "ALE/Pong-v5"
+agent:
+    kind: "random"
+vlm:
+    base_url: "http://localhost:8000/v1"
+    model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+    max_tokens: 80
+    temperature: 0.8
+    top_p: 0.9
+    image_detail: "low"
+tts:
+    enabled: true
+""",
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeNarrator:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    class FakeResult:
+        rendered_steps = 1
+        narration_count = 0
+        latency_p50_ms = None
+        latency_p95_ms = None
+
+    def fake_run_stage4_session(**kwargs: object) -> FakeResult:
+        captured.update(kwargs)
+        return FakeResult()
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+    monkeypatch.setattr("docugym.cli.run_stage4_session", fake_run_stage4_session)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "run",
+            "--no-voice",
+            "--steps",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["voice_enabled"] is False

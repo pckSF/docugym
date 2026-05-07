@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
-from docugym.runtime import run_stage4_session
+from docugym.runtime import SpeechSentence, run_stage4_session
 
 
 class DummyActionSpace:
@@ -80,6 +80,45 @@ class FakeNarrator:
         return "The patient traveller drifts onward."
 
 
+class FakeSpeakerSentence:
+    def __init__(self, graphemes: str, chunks: list[np.ndarray]) -> None:
+        self.graphemes = graphemes
+        self.chunks = chunks
+
+
+class FakeSpeaker:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def speak_sync(self, text: str) -> list[SpeechSentence]:
+        self.calls.append(text)
+        return cast(
+            "list[SpeechSentence]",
+            [
+                FakeSpeakerSentence(
+                    graphemes="The patient traveller drifts onward.",
+                    chunks=[np.ones(16, dtype=np.float32)],
+                )
+            ],
+        )
+
+
+class FakeAudioOutput:
+    def __init__(self) -> None:
+        self.started = False
+        self.stopped = False
+        self.chunks: list[np.ndarray] = []
+
+    def start(self) -> None:
+        self.started = True
+
+    def enqueue(self, chunk: np.ndarray) -> None:
+        self.chunks.append(chunk)
+
+    def stop(self) -> None:
+        self.stopped = True
+
+
 def test_run_stage4_session_narrates_on_fixed_cadence(monkeypatch) -> None:
     env = DummyEnv()
     displays: list[FakeDisplay] = []
@@ -128,3 +167,59 @@ def test_run_stage4_session_narrates_on_fixed_cadence(monkeypatch) -> None:
     assert display.closed is True
     assert display.status_updates[0] == (1, 1.0)
     assert display.subtitles[0] == "A pause. The creature gathers itself."
+
+
+def test_run_stage4_session_queues_tts_audio_when_voice_enabled(monkeypatch) -> None:
+    env = DummyEnv()
+    displays: list[FakeDisplay] = []
+
+    def fake_make_env(**_kwargs: Any) -> DummyEnv:
+        return env
+
+    def fake_display(**kwargs: Any) -> FakeDisplay:
+        instance = FakeDisplay(**kwargs)
+        displays.append(instance)
+        return instance
+
+    monkeypatch.setattr("docugym.runtime.make_env", fake_make_env)
+    monkeypatch.setattr("docugym.runtime.Display", fake_display)
+
+    narrator = FakeNarrator()
+    speaker = FakeSpeaker()
+    audio_output = FakeAudioOutput()
+
+    result = run_stage4_session(
+        env_id="ALE/Pong-v5",
+        seed=5,
+        fps=60,
+        window_scale=3,
+        subtitle_font="DejaVu Sans",
+        subtitle_size=22,
+        subtitle_max_text_width=960,
+        hud=True,
+        text_bands=True,
+        min_window_width=960,
+        env_kwargs={},
+        narrator=narrator,
+        narrate_every=2,
+        agent_kind="random",
+        sb3_repo_id=None,
+        sb3_filename=None,
+        voice_enabled=True,
+        speaker=speaker,
+        audio_output=audio_output,
+        max_steps=4,
+    )
+
+    display = displays[0]
+
+    assert result.rendered_steps == 4
+    assert result.narration_count == 2
+    assert audio_output.started is True
+    assert audio_output.stopped is True
+    assert len(audio_output.chunks) == 2
+    assert speaker.calls == [
+        "The patient traveller drifts onward.",
+        "The patient traveller drifts onward.",
+    ]
+    assert "The patient traveller drifts onward." in display.subtitles

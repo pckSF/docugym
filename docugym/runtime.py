@@ -9,7 +9,13 @@ from typing import Any, Callable, Literal, Protocol
 import numpy as np
 
 from docugym.display import Display
-from docugym.env import RandomAgent, ScriptedAgent, load_sb3_policy, make_env
+from docugym.env import (
+    DEFAULT_TRUSTED_SB3_REPO_PREFIXES,
+    RandomAgent,
+    ScriptedAgent,
+    load_sb3_policy,
+    make_env,
+)
 from docugym.narrator import NarrationContext
 
 logger = logging.getLogger(__name__)
@@ -32,6 +38,33 @@ class NarratorClient(Protocol):
         """Return narration text for a given frame and context."""
 
 
+class SpeechSentence(Protocol):
+    """Sentence-level TTS output used for subtitle and audio streaming."""
+
+    graphemes: str
+    chunks: list[np.ndarray]
+
+
+class SpeakerClient(Protocol):
+    """Synchronous speaker interface used by the runtime loop."""
+
+    def speak_sync(self, text: str) -> list[SpeechSentence]:
+        """Synthesize sentence-level audio chunks for a narration text."""
+
+
+class AudioOutputClient(Protocol):
+    """Audio output sink contract used by the runtime loop."""
+
+    def start(self) -> None:
+        """Start the audio callback stream."""
+
+    def enqueue(self, chunk: np.ndarray) -> None:
+        """Queue one mono float32 chunk for playback."""
+
+    def stop(self) -> None:
+        """Stop and release audio stream resources."""
+
+
 def run_stage4_session(
     *,
     env_id: str,
@@ -50,6 +83,17 @@ def run_stage4_session(
     agent_kind: Literal["random", "scripted", "sb3"],
     sb3_repo_id: str | None,
     sb3_filename: str | None,
+    trusted_repo_prefixes: list[str] | tuple[str, ...] = (
+        DEFAULT_TRUSTED_SB3_REPO_PREFIXES
+    ),
+    enforce_trusted_repo: bool = False,
+    voice_enabled: bool = False,
+    tts_engine: Literal["kokoro", "xtts", "chatterbox"] = "kokoro",
+    tts_voice: str = "bm_george",
+    tts_speed: float = 0.95,
+    tts_sample_rate: int = 24_000,
+    speaker: SpeakerClient | None = None,
+    audio_output: AudioOutputClient | None = None,
     max_steps: int | None = None,
     on_narration: Callable[[str, int, float], None] | None = None,
 ) -> Stage4RunResult:
@@ -77,11 +121,48 @@ def run_stage4_session(
     scripted_agent = ScriptedAgent(env_id=env_id, fallback=random_agent)
     policy = None
     policy_disabled = False
+    active_speaker = speaker
+    active_audio_output = audio_output
+    tts_active = voice_enabled
 
     if agent_kind == "sb3":
         if sb3_repo_id is None or sb3_filename is None:
             raise ValueError("sb3_repo_id and sb3_filename are required for SB3 agent")
-        policy = load_sb3_policy(repo_id=sb3_repo_id, filename=sb3_filename)
+        policy = load_sb3_policy(
+            repo_id=sb3_repo_id,
+            filename=sb3_filename,
+            trusted_repo_prefixes=trusted_repo_prefixes,
+            enforce_trusted_repo=enforce_trusted_repo,
+        )
+
+    if voice_enabled:
+        try:
+            if tts_engine != "kokoro":
+                raise ValueError(
+                    "Only 'kokoro' tts_engine is currently supported in Stage 5"
+                )
+
+            if active_audio_output is None:
+                from docugym.audio import AudioOutput
+
+                active_audio_output = AudioOutput(sample_rate=tts_sample_rate)
+
+            if active_speaker is None:
+                from docugym.tts import KokoroTTS
+
+                active_speaker = KokoroTTS(
+                    voice=tts_voice,
+                    speed=tts_speed,
+                    sample_rate=tts_sample_rate,
+                )
+
+            active_audio_output.start()
+        except Exception as exc:
+            logger.warning(
+                "Voice mode unavailable; continuing subtitle-only narration: %s",
+                exc,
+            )
+            tts_active = False
 
     step = 0
     episode_reward = 0.0
@@ -146,6 +227,27 @@ def run_stage4_session(
                 latency_samples_ms.append(latency_ms)
                 last_narration = narration
                 display.set_subtitle(narration)
+
+                if (
+                    tts_active
+                    and active_speaker is not None
+                    and active_audio_output is not None
+                ):
+                    try:
+                        for sentence in active_speaker.speak_sync(narration):
+                            subtitle_text = sentence.graphemes.strip()
+                            if subtitle_text:
+                                display.set_subtitle(subtitle_text)
+                            for chunk in sentence.chunks:
+                                active_audio_output.enqueue(chunk)
+                    except Exception as exc:
+                        logger.warning(
+                            "TTS synthesis failed at step=%d; "
+                            "continuing subtitle-only: %s",
+                            step,
+                            exc,
+                        )
+
                 logger.info(
                     "Narration[%d] step=%d latency_ms=%.1f text=%s",
                     narration_count,
@@ -167,6 +269,8 @@ def run_stage4_session(
                 observation, _ = env.reset()
                 episode_reward = 0.0
     finally:
+        if tts_active and active_audio_output is not None:
+            active_audio_output.stop()
         display.close()
         env.close()
 
