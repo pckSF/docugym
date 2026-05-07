@@ -10,31 +10,37 @@ lags gameplay by about one to two seconds but still feels synchronized and infor
 
 ## Quickstart (Stage 8)
 
-1. Install project dependencies:
+1. Install ffmpeg (required for optional Stage 9 recording):
+
+```bash
+sudo apt-get update && sudo apt-get install -y ffmpeg
+```
+
+2. Install project dependencies:
 
 ```bash
 uv sync
 ```
 
-2. Start the local VLM sidecar:
+3. Start the local VLM sidecar:
 
 ```bash
 scripts/serve_vlm.sh
 ```
 
-3. In another terminal, run with a preset config:
+4. In another terminal, run with a preset config:
 
 ```bash
 docugym run --config configs/atari.yaml --wait-for-vlm
 ```
 
-4. Run subtitle-only narration when you want lower compute or silent playback:
+5. Run subtitle-only narration when you want lower compute or silent playback:
 
 ```bash
 docugym run --config configs/lunarlander.yaml --no-voice --wait-for-vlm
 ```
 
-5. Override config values from the command line when needed:
+6. Override config values from the command line when needed:
 
 ```bash
 docugym run \
@@ -43,7 +49,7 @@ docugym run \
   --policy sb3/ppo-PongNoFrameskip-v4 \
   --wait-for-vlm
 
-6. Record a narrated run to MP4 (optional Stage 9):
+7. Record a narrated run to MP4 (optional Stage 9):
 
 ```bash
 docugym run --config configs/atari.yaml --record out/session.mp4 --wait-for-vlm
