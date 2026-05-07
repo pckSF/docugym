@@ -154,7 +154,7 @@ then start the next. At every stage: *you may deviate if a better approach appea
 - Create project `docugym/`, `pyproject.toml` with `uv` lock.
 - Add `pydantic-settings`-based config loader (`docugym/config.py`) reading
   `configs/default.yaml`. See §8 for the schema.
-- Add `pre-commit` with ruff + black; a minimal GitHub Actions workflow running
+- Add `pre-commit` with Ruff check + Ruff format; a minimal GitHub Actions workflow running
   `ruff check` + `pytest -q` on Linux.
 - Logging via `structlog` or stdlib `logging` with a friendly format.
 - **DoD:** `uv run docugym --help` works; config loads from a YAML and env-var

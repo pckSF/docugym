@@ -19,7 +19,7 @@ repos:
   rev: a333737ed43df02b18e6c95477ea1b285b3de15a # 8.0.1
   hooks:
   - id: isort
-    args: [--profile, black, --filter-files]
+    args: [--filter-files]
 
 - repo: https://github.com/zizmorcore/zizmor-pre-commit
   rev: b546b77c44c466a54a42af5499dcc0dcc1a3193f # v1.22.0

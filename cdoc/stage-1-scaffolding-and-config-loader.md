@@ -4,7 +4,7 @@ tags: [scaffolding, config, ci, stage-1]
 created: 2026-04-20
 updated: 2026-04-20
 status: active
-related: [stage-2-gym-env-wrapper-and-smoketest.md]
+related: [stage-2-gym-env-wrapper-and-smoketest.md, python-tooling-config-consolidation.md]
 ---
 
 # Stage 1 Scaffolding and Config Loader
@@ -82,3 +82,5 @@ handling with less custom parsing code.
 - 2026-04-20: Created.
 - 2026-04-20: Updated project naming references to docugym.
 - 2026-04-20: Linked follow-on Stage 2 decision note.
+- 2026-05-07: Linked Python tooling consolidation decision after Ruff replaced
+  historical Black formatting configuration in active automation.
