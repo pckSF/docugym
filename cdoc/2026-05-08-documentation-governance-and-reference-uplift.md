@@ -44,6 +44,9 @@ closer to large-library standards while staying source-first (no compiled docs).
 - Upgraded existing reference pages (`docs/api_reference.md`,
   `docs/config_reference.md`, `docs/documentation_contract.md`) so they align
   with the new information architecture and remain internally linkable.
+- Added repository policy to keep generated MkDocs output (`site/`) out of
+  version control via `.gitignore`, with CI/docs quality flows building docs
+  from source Markdown instead of tracking compiled artifacts.
 
 Validation summary during rollout:
 
@@ -58,3 +61,5 @@ Validation summary during rollout:
   and validation outcomes.
 - 2026-05-08: Expanded `docs/` to a full guide+reference suite and aligned
   legacy reference pages with the new publication-ready structure.
+- 2026-05-08: Added generated-doc-artifact policy (`site/` gitignored) and
+  documented source-only docs tracking expectations.

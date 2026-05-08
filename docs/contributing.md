@@ -50,6 +50,8 @@ uv run pytest -q
 - Update related docs when behavior, defaults, or CLI surfaces change.
 - Keep links relative and local within this folder when possible.
 - Follow the quality standards in [Documentation Contract](documentation_contract.md).
+- Do not commit generated site output; `site/` is a build artifact and remains
+	gitignored.
 
 ## Suggested Documentation Update Workflow
 
