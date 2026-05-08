@@ -1,0 +1,24 @@
+site_name: DocuGym
+site_description: Local-first narration layer for Gymnasium environments
+site_url: ""
+docs_dir: docs
+site_dir: site
+strict: true
+theme:
+  name: mkdocs
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - CLI Reference: cli_reference.md
+  - Architecture: architecture.md
+  - Library Integration Guide: library_guide.md
+  - API Reference: api_reference.md
+  - Configuration Reference: config_reference.md
+  - Troubleshooting: troubleshooting.md
+  - Contributing and Quality Gates: contributing.md
+  - Documentation Contract: documentation_contract.md
+markdown_extensions:
+  - tables
+  - fenced_code
+  - toc:
+      permalink: true

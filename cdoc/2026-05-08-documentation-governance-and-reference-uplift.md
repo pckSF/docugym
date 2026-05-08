@@ -33,6 +33,17 @@ closer to large-library standards while staying source-first (no compiled docs).
   - `docs/config_reference.md`
 - Follow-up policy change made subtitle-only the CLI default and voice opt-in,
   then aligned README/config-reference text with that decision.
+- Expanded `docs/` into a publish-ready documentation set with:
+  - `docs/index.md`
+  - `docs/getting_started.md`
+  - `docs/architecture.md`
+  - `docs/cli_reference.md`
+  - `docs/library_guide.md`
+  - `docs/troubleshooting.md`
+  - `docs/contributing.md`
+- Upgraded existing reference pages (`docs/api_reference.md`,
+  `docs/config_reference.md`, `docs/documentation_contract.md`) so they align
+  with the new information architecture and remain internally linkable.
 
 Validation summary during rollout:
 
@@ -45,3 +56,5 @@ Validation summary during rollout:
 
 - 2026-05-08: Created to record the governance/tooling/docs implementation batch
   and validation outcomes.
+- 2026-05-08: Expanded `docs/` to a full guide+reference suite and aligned
+  legacy reference pages with the new publication-ready structure.

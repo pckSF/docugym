@@ -1,90 +1,135 @@
 # Documentation Contract
 
-This project targets library-grade documentation quality for source docstrings
-and Markdown guides, similar to large public Python libraries.
+This contract defines quality and maintenance expectations for DocuGym
+documentation.
 
-## Goals
+## Mission
 
-- Make public APIs understandable without reading implementation details.
-- Explain behavioral guarantees, failure modes, and non-obvious constraints.
-- Keep docs close to code, with no compiled docs pipeline requirement.
+Documentation should make DocuGym usable without requiring implementation dives.
+It should describe expected behavior, boundaries, and operational tradeoffs with
+enough precision for both users and contributors.
 
 ## Scope
 
-- In scope: module docstrings, class docstrings, function/method docstrings,
-  README and companion Markdown references.
-- In scope: `docugym/` and `tests/`.
-- Out of scope: generated RST or Sphinx/MkDocs build artifacts.
+In scope:
 
-## Required Docstring Shape
+- Source docstrings in `docugym/` and `tests/`
+- User guides in `docs/`
+- Root README documentation
 
-### Modules
+Out of scope:
 
-- Required in every Python module in `docugym/` and `tests/`.
-- Summarize module purpose and why it exists separately.
+- Generated documentation artifacts
+- Static-site build tooling output
 
-### Classes
+## Documentation Information Architecture
 
-- Required for all classes.
-- Explain responsibility and lifecycle, not a member-by-member dump.
-- Add `Attributes:` for non-obvious state contracts.
+The `docs/` folder is organized into:
 
-### Public Functions and Methods
+- Entry/navigation page (`docs/index.md`)
+- Task guides (for example getting started, troubleshooting)
+- Concept guides (architecture and integration behavior)
+- Reference material (API and configuration)
+- Contributor guidance
+
+Every new user-facing feature should update:
+
+1. At least one task or concept page.
+2. The relevant reference page.
+3. README when discovery or setup behavior changes.
+
+## Source-of-Truth Rules
+
+- Python signatures and behavior contracts are source-of-truth in code.
+- `docs/api_reference.md` reflects stable exported API and CLI surface.
+- `docs/config_reference.md` reflects settings models and packaged defaults.
+- README provides top-level orientation and links to deeper docs.
+
+## Docstring Quality Requirements
+
+## Modules
+
+- Required in each Python module in `docugym/` and `tests/`.
+- Must explain module responsibility and role in system architecture.
+
+## Classes
+
+- Required for every class.
+- Must describe responsibility and lifecycle.
+- Include `Attributes:` where state contracts are non-obvious.
+
+## Public Functions and Methods
 
 Public means symbols that do not begin with `_`.
 
-- Required sections for public API surface:
-  - Short summary sentence.
-  - `Args:`
-  - `Returns:` for non-`None` values.
-  - `Raises:` when explicit error paths exist.
-- Add `Example:` or `Examples:` when call patterns are easy to misuse.
+Required structure:
 
-### Internal Helpers
+- Summary sentence
+- `Args:`
+- `Returns:` when non-`None`
+- `Raises:` for explicit failure paths
 
-- Document helpers whose behavior materially affects runtime correctness,
-  including async boundaries, queues, buffering, and policy loading.
-- Focus on invariants and side effects over obvious mechanics.
+Add `Example:` or `Examples:` when usage can be misapplied easily.
 
-## Writing Rules
+## Internal Helpers
 
-- Follow Google-style section headers.
-- Keep line length compatible with the 88-character formatter target.
-- Prefer behavior contracts and constraints over restating type hints.
-- Mention defaults only when they impact behavior.
+Document internals that materially affect correctness or operability, especially:
+
+- queue/backpressure behavior
+- async boundaries and cancellation behavior
+- trust/security checks
+- resource lifecycle semantics
+
+## Writing Style
+
+- Use Google-style section headers.
+- Prefer behavior and constraints over restating type hints.
+- Keep examples minimal but executable in principle.
+- Mention defaults where they influence outcomes.
+- Keep content concise; link to related docs instead of duplicating prose.
 
 ## README Standard
 
-README should cover, in order:
+README should cover:
 
-1. Problem framing and value proposition.
-2. Installation and system requirements.
+1. What DocuGym is and why to use it.
+2. Requirements and installation.
 3. Quickstart paths.
-4. Architecture snapshot.
-5. Configuration and API entrypoints.
-6. Troubleshooting and contributor workflow.
+4. Architecture summary.
+5. CLI and library usage pointers.
+6. Troubleshooting and development workflow.
+7. Links to reference docs.
 
 ## Quality Gates
 
-- Doc quality checks run through `scripts/check_doc_quality.py`.
-- Initial enforcement focuses on modules, classes, and public callables.
+Documentation quality is enforced with `scripts/check_doc_quality.py`.
 
-### Documentation Levels
+Strict run:
 
-The checker classifies each audited symbol into one of four levels:
+```bash
+python3 scripts/check_doc_quality.py --strict docugym tests
+```
 
-- `bare`: no docstring.
-- `minimal`: docstring present but shallow or structurally incomplete.
-- `standard`: complete and contract-compliant documentation.
-- `rich`: complete documentation plus additional context (for example Notes or
-  Examples).
+Checker levels:
+
+- `bare`: no docstring
+- `minimal`: present but structurally shallow
+- `standard`: complete contract-level documentation
+- `rich`: complete plus helpful context (examples/notes)
 
 Default thresholds:
 
-- Core modules (`docugym/`): minimum level `standard`.
-- Test modules (`tests/`): minimum level `minimal`.
+- Core modules (`docugym/`): minimum `standard`
+- Test modules (`tests/`): minimum `minimal`
 
-Use checker flags to tune policy for a rollout or stricter CI profile:
+Tunable flags:
 
 - `--min-level-core`
 - `--min-level-tests`
+
+## Change Management Expectations
+
+- Do not silently change meaning in docs during broad cleanup.
+- When behavior changes, update docs in the same change set.
+- Prefer additive clarification over deleting context unless obsolete.
+- Keep links local and valid; run a quick manual link check after edits.
