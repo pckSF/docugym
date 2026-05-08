@@ -1,3 +1,5 @@
+"""Configuration loading tests for YAML parsing and env-var overrides."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

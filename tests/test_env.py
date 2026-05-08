@@ -1,3 +1,5 @@
+"""Environment and policy-loading tests for env creation and SB3 trust paths."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,6 +21,8 @@ from docugym.env import (
 
 
 class DummyActionSpace:
+    """Action-space stub that records seed values and fixed samples."""
+
     def __init__(self, sample_value: int = 1) -> None:
         self.sample_value = sample_value
         self.seed_value: int | None = None
@@ -31,6 +35,8 @@ class DummyActionSpace:
 
 
 class DummyEnv:
+    """Simple env stub used for deterministic stepping and rendering."""
+
     def __init__(self) -> None:
         self.action_space = DummyActionSpace(sample_value=3)
         self.reset_calls: list[int | None] = []
@@ -58,6 +64,8 @@ class DummyEnv:
 
 
 class DummyAlgo:
+    """SB3 algorithm stub capturing load call paths and keyword arguments."""
+
     load_calls: list[str] = []
     load_kwargs: list[dict[str, object]] = []
 

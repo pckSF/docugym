@@ -169,6 +169,13 @@ class VLMNarrator:
         This method intentionally creates a short-lived async client per call to
         avoid cross-loop reuse hazards in synchronous code paths.
 
+        Args:
+            frame: RGB/RGBA frame encoded and sent to the VLM endpoint.
+            context: Prompt context carrying scene, event, and continuity details.
+
+        Returns:
+            Narration text, or fallback narration when response content is empty.
+
         Raises:
             RuntimeError: If called from a running event loop.
         """
@@ -269,6 +276,10 @@ class VLMNarrator:
         poll_interval_seconds: float = 1.0,
     ) -> bool:
         """Synchronous wrapper around :meth:`wait_until_ready`.
+
+        Args:
+            timeout_seconds: Maximum polling duration.
+            poll_interval_seconds: Delay between readiness probes.
 
         Raises:
             RuntimeError: If called while an event loop is running.

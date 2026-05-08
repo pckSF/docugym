@@ -1087,6 +1087,12 @@ def run_session_sync(**kwargs: Any) -> RunResult:
     an event loop. It intentionally fails fast inside active loops to avoid nested
     loop bugs and to push async callers toward ``await run_session(...)``.
 
+    Args:
+        **kwargs: Keyword arguments forwarded directly to :func:`run_session`.
+
+    Returns:
+        Aggregated run metrics produced by :func:`run_session`.
+
     Raises:
         RuntimeError: If called while an event loop is already running.
     """

@@ -88,7 +88,17 @@ class AppState:
 
 
 def _get_state(ctx: typer.Context) -> AppState:
-    """Return initialized CLI state or fail with a user-facing error."""
+    """Return initialized CLI state or fail with a user-facing error.
+
+    Args:
+        ctx: Typer context that stores shared command state.
+
+    Returns:
+        Shared application state initialized by the root callback.
+
+    Raises:
+        typer.BadParameter: If the callback did not initialize ``ctx.obj``.
+    """
 
     if not isinstance(ctx.obj, AppState):
         raise typer.BadParameter("Application state is not initialized.")
@@ -117,7 +127,17 @@ def _parse_env_kwargs(value: str | None) -> dict[str, Any]:
 
 
 def _load_preset_settings(config_path: Path) -> AppSettings:
-    """Load one preset YAML file into validated application settings."""
+    """Load one preset YAML file into validated application settings.
+
+    Args:
+        config_path: Path to a YAML preset file under ``configs/``.
+
+    Returns:
+        Validated settings object decoded from the preset file.
+
+    Raises:
+        ValueError: If YAML content is not a mapping at the root.
+    """
 
     raw_data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if raw_data is None:
@@ -145,6 +165,11 @@ def main(
 
     The callback configures logging and stores validated settings in ``ctx.obj`` so
     subcommands can share one consistent configuration source.
+
+    Args:
+        ctx: Typer context used to store shared application state.
+        config: YAML configuration file used to populate ``AppSettings``.
+        log_level: Logging verbosity passed to runtime logger configuration.
     """
 
     configure_logging(log_level)
@@ -159,6 +184,9 @@ def show_config(ctx: typer.Context) -> None:
 
     Args:
         ctx: Typer context carrying shared application state.
+
+    Returns:
+        ``None``. Writes formatted JSON to stdout.
     """
 
     settings = _get_state(ctx).settings
@@ -170,6 +198,9 @@ def list_voices() -> None:
     """Print curated Kokoro British voice ids with sample phrases.
 
     This command is a quick discovery surface for choosing ``--tts-voice`` values.
+
+    Returns:
+        ``None``. Prints voice ids and sample text lines.
     """
 
     typer.echo("Kokoro British voices:")
@@ -183,6 +214,9 @@ def list_envs() -> None:
 
     Presets are loaded through the same settings model used by runtime commands so
     this output mirrors effective default behavior.
+
+    Returns:
+        ``None``. Prints one line per discovered preset.
     """
 
     config_dir = Path("configs")

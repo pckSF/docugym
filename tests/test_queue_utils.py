@@ -1,3 +1,5 @@
+"""Queue utility tests for drop-oldest and drain-latest semantics."""
+
 from __future__ import annotations
 
 import asyncio

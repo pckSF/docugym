@@ -1,3 +1,5 @@
+"""Wrapper-mode integration tests for callbacks, shortcuts, and live state flow."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -11,6 +13,8 @@ from docugym.wrapper import docuwrapper
 
 
 class DummyEnv(gym.Env[np.ndarray, int]):
+    """Minimal Gymnasium env stub for wrapper interaction tests."""
+
     def __init__(self) -> None:
         self.action_space = gym.spaces.Discrete(2)
         self.observation_space = gym.spaces.Box(
@@ -51,6 +55,8 @@ class DummyEnv(gym.Env[np.ndarray, int]):
 
 
 class FakeDisplay:
+    """Display stub with scheduled actions and captured UI state updates."""
+
     instances: list["FakeDisplay"] = []
 
     def __init__(self, **kwargs: Any) -> None:
@@ -97,6 +103,8 @@ class FakeDisplay:
 
 
 class FakeNarrator:
+    """Narrator stub that returns deterministic text without network calls."""
+
     def __init__(self, **kwargs: Any) -> None:
         del kwargs
 

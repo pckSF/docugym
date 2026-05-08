@@ -14,6 +14,10 @@ from typing import Any
 def push_drop_oldest_async(queue_obj: asyncio.Queue[Any], item: Any) -> bool:
     """Enqueue without blocking and drop the oldest item on overflow.
 
+    Args:
+        queue_obj: Async queue receiving producer items.
+        item: Item to enqueue without blocking.
+
     Returns:
         ``True`` when an item had to be dropped due to queue pressure.
     """
@@ -72,6 +76,10 @@ def clear_async_queue(queue_obj: asyncio.Queue[Any]) -> None:
 
 def push_drop_oldest_sync(queue_obj: queue.Queue[Any], item: Any) -> bool:
     """Synchronous variant of :func:`push_drop_oldest_async`.
+
+    Args:
+        queue_obj: Sync queue receiving producer items.
+        item: Item to enqueue without blocking.
 
     Returns:
         ``True`` when an item had to be dropped due to queue pressure.

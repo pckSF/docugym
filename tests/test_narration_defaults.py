@@ -1,3 +1,5 @@
+"""Narration default and validation tests for shared runtime constraints."""
+
 from __future__ import annotations
 
 from typing import Any

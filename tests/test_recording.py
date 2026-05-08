@@ -1,3 +1,5 @@
+"""Recording tests for FFmpeg stream writes and stderr draining behavior."""
+
 from __future__ import annotations
 
 from io import BytesIO
@@ -13,6 +15,8 @@ if TYPE_CHECKING:
 
 
 class FakeStdin:
+    """Process-stdin stub capturing writes and close state."""
+
     def __init__(self) -> None:
         self.writes: list[object] = []
         self.closed = False
@@ -30,6 +34,8 @@ class FakeStdin:
 
 
 class FakeStderr(BytesIO):
+    """BytesIO stderr stub that counts reads during recorder close."""
+
     def __init__(self) -> None:
         super().__init__(b"warning line\n")
         self.read_calls = 0
@@ -40,6 +46,8 @@ class FakeStderr(BytesIO):
 
 
 class FakeProcess:
+    """Subprocess stub exposing fake stdin/stderr handles."""
+
     def __init__(self) -> None:
         self.stdin = FakeStdin()
         self.stderr = FakeStderr()

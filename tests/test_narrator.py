@@ -1,3 +1,5 @@
+"""Narrator client tests for payload shape, client reuse, and readiness polling."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,6 +14,8 @@ from docugym.narrator import NarrationContext, VLMNarrator
 
 
 class _FakeResponse:
+    """Minimal HTTP-response stub with JSON payload and status simulation."""
+
     def __init__(self, payload: dict[str, object], status_code: int = 200) -> None:
         self._payload = payload
         self.status_code = status_code
@@ -25,6 +29,8 @@ class _FakeResponse:
 
 
 class _FakeAsyncClient:
+    """Async HTTP-client stub capturing post/get calls for assertions."""
+
     def __init__(
         self, capture: dict[str, Any], status_codes: list[int] | None = None
     ) -> None:

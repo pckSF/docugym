@@ -1,3 +1,5 @@
+"""Clip snapshot tests for PNG/text persistence and dtype normalization."""
+
 from __future__ import annotations
 
 import numpy as np

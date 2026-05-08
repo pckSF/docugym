@@ -1,3 +1,5 @@
+"""Narration event formatting tests for compact context-string builders."""
+
 from __future__ import annotations
 
 from docugym.narration_events import (

@@ -177,6 +177,17 @@ def mean_abs_pixel_delta(
 
     Downsampling is used to reduce per-frame CPU cost because this metric is only
     a trigger heuristic, not a full perceptual-quality estimate.
+
+    Args:
+        current: Current frame array used for delta comparison.
+        previous: Previous frame array used for delta comparison.
+        downsample_stride: Positive stride applied before RGB delta computation.
+
+    Returns:
+        Mean absolute RGB-channel delta across sampled pixels.
+
+    Raises:
+        ValueError: If ``downsample_stride`` is not positive.
     """
 
     if downsample_stride <= 0:

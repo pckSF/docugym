@@ -80,6 +80,12 @@ class KokoroTTS:
     def speak_sync(self, text: str) -> list[SpeechSentence]:
         """Synchronous wrapper around :meth:`speak` for thread-based callers.
 
+        Args:
+            text: Narration text to synthesize.
+
+        Returns:
+            Sentence-level synthesis outputs for subtitle/audio playback.
+
         Raises:
             RuntimeError: If called from a running event loop.
         """

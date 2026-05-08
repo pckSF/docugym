@@ -1,3 +1,5 @@
+"""Display action tests for action polling and transition sequencing."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -6,6 +8,8 @@ from docugym.display_actions import build_action_transitions, poll_display_actio
 
 
 class FakeDisplay:
+    """Display stub exposing a configurable action payload."""
+
     def __init__(self, actions: Any) -> None:
         self._actions = actions
 

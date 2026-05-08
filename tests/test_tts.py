@@ -1,3 +1,5 @@
+"""Kokoro TTS tests for sentence splitting, chunking, and title handling."""
+
 from __future__ import annotations
 
 import sys
@@ -9,6 +11,8 @@ from docugym.tts import KokoroTTS
 
 
 class FakePipeline:
+    """Pipeline stub returning deterministic audio tuples per sentence."""
+
     def __init__(self, lang_code: str) -> None:
         self.lang_code = lang_code
         self.calls: list[tuple[str, str, float]] = []

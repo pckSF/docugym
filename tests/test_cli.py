@@ -1,3 +1,5 @@
+"""CLI command tests for config merging, overrides, and user-facing validation."""
+
 from __future__ import annotations
 
 from pathlib import Path

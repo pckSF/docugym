@@ -1,3 +1,5 @@
+"""Prompt tuning tests for sample collection, context carryover, and validation."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -12,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class DummyActionSpace:
+    """Action-space stub that returns a deterministic action."""
+
     def sample(self) -> int:
         return 1
 
@@ -20,6 +24,8 @@ class DummyActionSpace:
 
 
 class DummyEnv:
+    """Environment stub with deterministic observations and rewards."""
+
     def __init__(self) -> None:
         self.action_space = DummyActionSpace()
         self.step_count = 0
@@ -47,6 +53,8 @@ class DummyEnv:
 
 
 class FakeNarrator:
+    """Narrator stub that captures context and emits numbered lines."""
+
     def __init__(self) -> None:
         self.calls: list[NarrationContext] = []
 

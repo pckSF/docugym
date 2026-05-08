@@ -39,6 +39,12 @@ def save_clip_snapshot(
 ) -> tuple[Path, Path]:
     """Save one frame and narration text as a timestamped snapshot pair.
 
+    Args:
+        frame: RGB/RGBA frame to persist as a PNG snapshot.
+        step: Environment step used for deterministic filename labeling.
+        narration: Narration text saved alongside the frame.
+        out_dir: Destination directory for PNG/TXT snapshot files.
+
     Returns:
         Tuple of ``(frame_png_path, narration_text_path)``.
     """

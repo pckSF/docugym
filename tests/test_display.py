@@ -1,3 +1,5 @@
+"""Display tests for frame normalization, layout math, and smoke rendering."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -8,11 +10,15 @@ from docugym.display import Display, run_display_smoketest
 
 
 class DummyActionSpace:
+    """Action-space stub providing deterministic sampled actions."""
+
     def sample(self) -> int:
         return 1
 
 
 class DummyEnv:
+    """Environment stub with predictable reward and render progression."""
+
     def __init__(self) -> None:
         self.action_space = DummyActionSpace()
         self.reset_calls: list[int | None] = []
@@ -38,6 +44,8 @@ class DummyEnv:
 
 
 class FakeDisplay:
+    """Display stub that records subtitle, status, and frame blits."""
+
     def __init__(self, **kwargs: Any) -> None:
         self.kwargs = kwargs
         self.status_updates: list[tuple[int, float]] = []

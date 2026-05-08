@@ -1,3 +1,5 @@
+"""Runtime orchestration tests for narration cadence, controls, and I/O fan-out."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +12,8 @@ from docugym.runtime import SpeechSentence, run_session_sync
 
 
 class DummyActionSpace:
+    """Minimal action-space stub with deterministic sample output."""
+
     def sample(self) -> int:
         return 1
 
@@ -18,6 +22,8 @@ class DummyActionSpace:
 
 
 class DummyEnv:
+    """Deterministic env stub with predictable rewards and render frames."""
+
     def __init__(self) -> None:
         self.action_space = DummyActionSpace()
         self.step_count = 0
@@ -51,6 +57,8 @@ class DummyEnv:
 
 
 class FakeDisplay:
+    """Display stub that records subtitle and status updates."""
+
     def __init__(self, **kwargs: Any) -> None:
         self.kwargs = kwargs
         self.is_open = True
@@ -74,6 +82,8 @@ class FakeDisplay:
 
 
 class FakeInteractiveDisplay(FakeDisplay):
+    """Display stub variant that emits scheduled keyboard actions."""
+
     def __init__(
         self,
         *,
@@ -102,12 +112,16 @@ class FakeInteractiveDisplay(FakeDisplay):
 
 
 class FakeSpeakerSentence:
+    """Container object matching the runtime speech-sentence protocol."""
+
     def __init__(self, graphemes: str, chunks: list[np.ndarray]) -> None:
         self.graphemes = graphemes
         self.chunks = chunks
 
 
 class FakeSpeaker:
+    """Synchronous speaker stub returning one deterministic sentence."""
+
     def __init__(self) -> None:
         self.calls: list[str] = []
 
@@ -125,6 +139,8 @@ class FakeSpeaker:
 
 
 class DistinctSubtitleSpeaker:
+    """Speaker stub that returns subtitle text distinct from narration text."""
+
     def speak_sync(self, text: str) -> list[SpeechSentence]:
         del text
         return cast(
@@ -139,6 +155,8 @@ class DistinctSubtitleSpeaker:
 
 
 class FakeAudioOutput:
+    """Audio sink stub capturing stream lifecycle and queued chunks."""
+
     def __init__(self) -> None:
         self.started = False
         self.stopped = False
@@ -155,6 +173,8 @@ class FakeAudioOutput:
 
 
 class FakeRecorder:
+    """Recorder stub that captures copied frame/audio payloads for assertions."""
+
     def __init__(self) -> None:
         self.video_frames: list[np.ndarray] = []
         self.audio_chunks: list[np.ndarray] = []
@@ -175,6 +195,8 @@ class FakeRecorder:
 
 
 class AsyncFakeNarrator:
+    """Async narrator stub with optional delay for backpressure tests."""
+
     def __init__(self, delay_seconds: float = 0.0) -> None:
         self.delay_seconds = delay_seconds
         self.calls: list[tuple[tuple[int, int, int], str]] = []

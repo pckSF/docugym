@@ -1,3 +1,5 @@
+"""Keyframe selector tests for cadence, cooldown, and visual-delta triggers."""
+
 from __future__ import annotations
 
 import numpy as np

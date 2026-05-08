@@ -34,6 +34,16 @@ def format_event_summary(
 
     The output is intentionally compact and deterministic so prompt behavior is
     easier to compare across runs and model variants.
+
+    Args:
+        step: Environment step index at capture time.
+        reward: Step reward, if one is available for this event.
+        episode_reward: Episode return accumulated through this step.
+        visual_delta: Mean absolute RGB delta relative to prior sampled frame.
+        triggers: Trigger labels that caused narration candidate selection.
+
+    Returns:
+        Deterministic one-line context summary consumed by narrator prompts.
     """
 
     reward_text = "n/a" if reward is None else f"{reward:+.2f}"

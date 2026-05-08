@@ -18,6 +18,12 @@ def validate_narration_config(
 ) -> None:
     """Validate narration cadence/context bounds shared across entrypoints.
 
+    Args:
+        narration_interval_seconds: Target narration cadence in seconds.
+        min_gap_seconds: Minimum spacing between accepted narration events.
+        max_context_events: Maximum count of recent events in narrator context.
+        previous_narration_window: Number of previous lines retained for context.
+
     Raises:
         ValueError: If any duration/count argument falls outside allowed bounds.
     """
