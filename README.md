@@ -1,5 +1,12 @@
 # DocuGym
 
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](pyproject.toml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-92%20passed-brightgreen)](tests)
+[![Lint](https://img.shields.io/badge/lint-ruff%20passing-brightgreen)](pyproject.toml)
+[![Docs](https://img.shields.io/badge/docs-strict%20quality%20passing-brightgreen)](docs/documentation_contract.md)
+[![Install Smoke](https://img.shields.io/badge/install%20smoke-passing-brightgreen)](README.md#installation)
+
 DocuGym is a fully local desktop application that turns live Gymnasium runs into
 nature-documentary-style experiences with synchronized subtitles and optional voice.
 It is designed for single-machine execution with local VLM narration and local TTS.
@@ -44,23 +51,41 @@ Primary use cases:
 
 ## Installation
 
-1. Install system dependency for recording:
+1. Clone the repository, enter the checkout, and install into your active Python
+environment:
+
+```bash
+git clone <repo-url> docugym
+cd docugym
+python3 -m pip install .
+```
+
+With uv, install the project into the selected environment with:
+
+```bash
+uv pip install .
+```
+
+2. Install optional extras when the same environment should also host VLM or voice
+runtime dependencies:
+
+```bash
+python3 -m pip install ".[vlm]"
+python3 -m pip install ".[voice]"
+python3 -m pip install ".[vlm,voice]"
+```
+
+Use `uv pip install ".[vlm,voice]"` for the equivalent uv environment install.
+
+3. Install system dependency for recording when you want MP4 output:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y ffmpeg
 ```
 
-2. Install lightweight default dependencies (subtitle-only runtime):
-
-```bash
-uv sync --extra vlm
-```
-
-3. Install voice dependencies only when you want spoken narration:
-
-```bash
-uv sync --extra vlm --extra voice
-```
+For repository development, use `uv sync --extra vlm --extra voice` instead of
+`uv pip install .`; `uv sync` creates and maintains the checkout's development
+environment.
 
 ## Quickstart
 
@@ -70,16 +95,19 @@ uv sync --extra vlm --extra voice
 scripts/serve_vlm.sh
 ```
 
-2. Start a narrated run from a preset:
+2. Start a narrated run from a packaged preset:
 
 ```bash
-docugym run --config configs/atari.yaml --wait-for-vlm
+docugym run --config atari --wait-for-vlm
 ```
+
+Editable YAML files still work from a checkout, for example
+`docugym run --config configs/atari.yaml --wait-for-vlm`.
 
 3. Enable voiced narration when you want audio (opt-in):
 
 ```bash
-docugym run --config configs/lunarlander.yaml --voice --wait-for-vlm
+docugym run --config lunarlander --voice --wait-for-vlm
 ```
 
 4. Override environment or policy at runtime:
@@ -95,7 +123,7 @@ docugym run \
 5. Record to MP4:
 
 ```bash
-docugym run --config configs/atari.yaml --record out/session.mp4 --wait-for-vlm
+docugym run --config atari --record out/session.mp4 --wait-for-vlm
 ```
 
 ## Architecture Snapshot
@@ -157,6 +185,17 @@ for _ in range(300):
 				obs, info = env.reset()
 
 env.close()
+```
+
+Library users can also tune the default narration prompt before constructing a
+narrator or wrapper:
+
+```python
+from docugym import reset_system_prompt, set_system_prompt
+
+set_system_prompt("Narrate with terse, analytical field notes.")
+# Create VLMNarrator or docuwrapper(...) here.
+reset_system_prompt()
 ```
 
 Wrapper behavior notes:

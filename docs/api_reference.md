@@ -7,8 +7,31 @@ This document summarizes stable, user-facing entrypoints for DocuGym.
 Import surface:
 
 ```python
-from docugym import DocuWrapper, docuwrapper
+from docugym import (
+	AppSettings,
+	DocuWrapper,
+	NarrationContext,
+	PromptTuningSample,
+	RunResult,
+	VLMNarrator,
+	docuwrapper,
+	get_system_prompt,
+	load_settings,
+	reset_system_prompt,
+	run_prompt_tuning,
+	run_session_sync,
+	set_system_prompt,
+)
 ```
+
+The package root exposes the supported library surface for installed use:
+
+- Wrapper API: `DocuWrapper`, `docuwrapper`, and callback type aliases.
+- Configuration API: `AppSettings`, settings models, and `load_settings`.
+- Narrator API: `VLMNarrator` and `NarrationContext`.
+- Runtime API: `run_session_sync`, `run_session`, and `RunResult`.
+- Tuning API: `run_prompt_tuning` and `PromptTuningSample`.
+- Prompt API: `get_system_prompt`, `set_system_prompt`, and `reset_system_prompt`.
 
 ### docuwrapper
 
@@ -81,6 +104,59 @@ Discover command options with:
 docugym --help
 docugym run --help
 docugym tune prompt --help
+```
+
+`--config` accepts either an explicit YAML path or a packaged preset name. These
+are equivalent from a source checkout:
+
+```bash
+docugym run --config atari
+docugym run --config configs/atari.yaml
+```
+
+After installation, preset names such as `default`, `atari`, `lunarlander`, and
+`carracing` work from any current directory.
+
+## Configuration API
+
+Load defaults or packaged presets:
+
+```python
+from docugym import load_settings
+
+default_settings = load_settings()
+atari_settings = load_settings("atari")
+custom_settings = load_settings("configs/atari.yaml")
+```
+
+Environment variables with the `DOCUGYM_` prefix still override YAML values.
+
+## Prompt Customization API
+
+Use process-wide prompt helpers for interactive/library sessions:
+
+```python
+from docugym import get_system_prompt, reset_system_prompt, set_system_prompt
+
+original_prompt = get_system_prompt()
+set_system_prompt("Narrate with terse, analytical field notes.")
+reset_system_prompt()
+```
+
+Use per-instance prompt overrides when a single narrator should differ from the
+process default:
+
+```python
+from docugym import VLMNarrator
+
+narrator = VLMNarrator(
+	base_url="http://localhost:8000/v1",
+	model="Qwen/Qwen3-VL-8B-Instruct-AWQ",
+	max_tokens=80,
+	temperature=0.8,
+	top_p=0.9,
+	system_prompt="Narrate with terse, analytical field notes.",
+)
 ```
 
 ## Prompt Tuning Data Model
