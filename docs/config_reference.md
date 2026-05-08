@@ -50,6 +50,13 @@ Examples:
 - `trusted_repo_prefixes` (`list[str]`, default `["sb3/"]`)
 - `enforce_trusted_repo` (`bool`, default `true`)
 
+When `agent.kind` resolves to `sb3` in CLI commands:
+
+- Untrusted settings require explicit opt-in with `--allow-untrusted-repo`.
+- Interactive runs prompt for confirmation unless `--yes` is also passed.
+- Custom repos outside `trusted_repo_prefixes` must pin a revision using
+  `--revision` or `agent.sb3_revision`; mutable HEAD fetches are rejected.
+
 ### vlm
 
 - `base_url` (`str`, default `http://localhost:8000/v1`)

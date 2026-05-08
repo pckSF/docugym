@@ -502,6 +502,187 @@ vlm:
     assert captured["sb3_revision"] is None
 
 
+def test_run_rejects_untrusted_sb3_without_explicit_allow(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+  env_id: "ALE/Pong-v5"
+agent:
+  kind: "sb3"
+  sb3_repo_id: "sb3/ppo-PongNoFrameskip-v4"
+  sb3_filename: "ppo-PongNoFrameskip-v4.zip"
+  sb3_revision: "c0741d2e949614ef905e2489241c3032d1c9cce3"
+  enforce_trusted_repo: false
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+""",
+        encoding="utf-8",
+    )
+
+    called = {"run": False}
+
+    class FakeNarrator:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    class FakeResult:
+        rendered_steps = 1
+        narration_count = 0
+        latency_p50_ms = None
+        latency_p95_ms = None
+        dropped_narration_candidates = 0
+
+    def fake_run_session_sync(**_kwargs: object) -> FakeResult:
+        called["run"] = True
+        return FakeResult()
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+    monkeypatch.setattr("docugym.cli.run_session_sync", fake_run_session_sync)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "run",
+            "--steps",
+            "1",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--allow-untrusted-repo" in result.output
+    assert called["run"] is False
+
+
+def test_run_allows_untrusted_with_explicit_flag_and_yes(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+  env_id: "ALE/Pong-v5"
+agent:
+  kind: "sb3"
+  sb3_repo_id: "sb3/ppo-PongNoFrameskip-v4"
+  sb3_filename: "ppo-PongNoFrameskip-v4.zip"
+  sb3_revision: "c0741d2e949614ef905e2489241c3032d1c9cce3"
+  enforce_trusted_repo: false
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+""",
+        encoding="utf-8",
+    )
+
+    captured: dict[str, object] = {}
+
+    class FakeNarrator:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    class FakeResult:
+        rendered_steps = 1
+        narration_count = 0
+        latency_p50_ms = None
+        latency_p95_ms = None
+        dropped_narration_candidates = 0
+
+    def fake_run_session_sync(**kwargs: object) -> FakeResult:
+        captured.update(kwargs)
+        return FakeResult()
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+    monkeypatch.setattr("docugym.cli.run_session_sync", fake_run_session_sync)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "run",
+            "--allow-untrusted-repo",
+            "--yes",
+            "--steps",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["enforce_trusted_repo"] is False
+
+
+def test_run_rejects_custom_repo_without_revision_even_when_allowed(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+run:
+  env_id: "ALE/Pong-v5"
+agent:
+  kind: "sb3"
+  sb3_repo_id: "sb3/ppo-PongNoFrameskip-v4"
+  sb3_filename: "ppo-PongNoFrameskip-v4.zip"
+  sb3_revision: "c0741d2e949614ef905e2489241c3032d1c9cce3"
+  enforce_trusted_repo: false
+vlm:
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen/Qwen3-VL-8B-Instruct-AWQ"
+  max_tokens: 80
+  temperature: 0.8
+  top_p: 0.9
+  image_detail: "low"
+""",
+        encoding="utf-8",
+    )
+
+    class FakeNarrator:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    monkeypatch.setattr("docugym.cli.VLMNarrator", FakeNarrator)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        [
+            "--config",
+            str(config_path),
+            "run",
+            "--repo-id",
+            "evil-org/ppo-PongNoFrameskip-v4",
+            "--filename",
+            "ppo-PongNoFrameskip-v4.zip",
+            "--allow-untrusted-repo",
+            "--yes",
+            "--steps",
+            "1",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--revision" in result.output
+
+
 def test_run_no_voice_flag_enables_subtitle_only_mode(
     monkeypatch,
     tmp_path: Path,

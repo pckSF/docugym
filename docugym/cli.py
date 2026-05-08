@@ -11,7 +11,7 @@ from importlib import import_module
 import json
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 import typer
 import yaml
@@ -41,6 +41,8 @@ run_prompt_tuning: Any | None = None
 run_session_sync: Any | None = None
 run_smoketest: Any | None = None
 VLMNarrator: Any | None = None
+
+_DEFAULT_TRUSTED_SB3_REPO_PREFIXES: tuple[str, ...] = ("sb3/",)
 
 _KOKORO_BRITISH_VOICE_SAMPLES: tuple[tuple[str, str], ...] = (
     (
@@ -146,6 +148,98 @@ def _parse_env_kwargs(value: str | None) -> dict[str, Any]:
         raise typer.BadParameter("--env-kwargs must decode to a JSON object")
 
     return dict(parsed)
+
+
+def _normalize_repo_prefixes(trusted_repo_prefixes: Sequence[str]) -> tuple[str, ...]:
+    """Return cleaned trusted repo prefixes, falling back to project defaults.
+
+    Args:
+        trusted_repo_prefixes: Candidate trusted repository prefixes from config.
+
+    Returns:
+        Tuple of normalized trusted repository prefixes.
+    """
+
+    normalized = tuple(
+        prefix.strip() for prefix in trusted_repo_prefixes if prefix.strip()
+    )
+    if normalized:
+        return normalized
+    return _DEFAULT_TRUSTED_SB3_REPO_PREFIXES
+
+
+def _is_trusted_repo(repo_id: str, trusted_prefixes: tuple[str, ...]) -> bool:
+    """Check whether a repo id starts with one of the configured prefixes."""
+
+    return any(repo_id.startswith(prefix) for prefix in trusted_prefixes)
+
+
+def _resolve_trusted_repo_enforcement(
+    *,
+    agent_kind: Literal["random", "scripted", "sb3"],
+    repo_id: str,
+    revision: str | None,
+    trusted_repo_prefixes: Sequence[str],
+    enforce_trusted_repo: bool,
+    allow_untrusted_repo: bool,
+    yes: bool,
+) -> bool:
+    """Resolve effective trust enforcement for one CLI command invocation.
+
+    Args:
+        agent_kind: Effective CLI agent selection.
+        repo_id: Effective SB3 repository id.
+        revision: Effective SB3 revision pin.
+        trusted_repo_prefixes: Configured trusted repository prefixes.
+        enforce_trusted_repo: Config-level trust enforcement toggle.
+        allow_untrusted_repo: CLI opt-in to untrusted SB3 loading.
+        yes: Skip interactive confirmation when opting into untrusted loading.
+
+    Returns:
+        Effective ``enforce_trusted_repo`` value to pass downstream.
+
+    Raises:
+        typer.BadParameter: If explicit untrusted opt-in is missing or if a
+            custom untrusted repo has no revision pin.
+        typer.Exit: If interactive confirmation is declined.
+    """
+
+    if agent_kind != "sb3":
+        return enforce_trusted_repo
+
+    trusted_prefixes = _normalize_repo_prefixes(trusted_repo_prefixes)
+    repo_is_trusted = _is_trusted_repo(repo_id, trusted_prefixes)
+
+    if not repo_is_trusted and revision is None:
+        raise typer.BadParameter(
+            "Custom SB3 repositories must pin --revision (or agent.sb3_revision) "
+            "before policy loading.",
+            param_hint="--revision",
+        )
+
+    requires_explicit_opt_in = (not enforce_trusted_repo) or (not repo_is_trusted)
+    if not requires_explicit_opt_in:
+        return enforce_trusted_repo
+
+    if not allow_untrusted_repo:
+        raise typer.BadParameter(
+            "SB3 policy loading with untrusted settings requires "
+            "--allow-untrusted-repo. Stable-Baselines3 deserialization can "
+            "execute arbitrary code.",
+            param_hint="--allow-untrusted-repo",
+        )
+
+    if not yes:
+        confirmed = typer.confirm(
+            "You are opting into untrusted SB3 policy deserialization. Continue?",
+            default=False,
+        )
+        if not confirmed:
+            raise typer.Exit(code=1)
+
+    # Returning False preserves the warning-only loader path only when explicitly
+    # acknowledged by the operator for this invocation.
+    return False
 
 
 def _load_preset_settings(config_path: Path) -> AppSettings:
@@ -303,6 +397,19 @@ def smoketest(
         "--revision",
         help="Optional Hugging Face commit SHA, tag, or branch for SB3 download.",
     ),
+    allow_untrusted_repo: bool = typer.Option(
+        False,
+        "--allow-untrusted-repo",
+        help=(
+            "Allow SB3 policy loading when trust enforcement is disabled or the "
+            "repo id is outside trusted prefixes."
+        ),
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Skip the interactive untrusted-repo confirmation prompt.",
+    ),
     env_kwargs: str | None = typer.Option(
         None,
         "--env-kwargs",
@@ -331,6 +438,15 @@ def smoketest(
     effective_revision = revision
     if effective_revision is None and repo_id is None:
         effective_revision = config.agent.sb3_revision
+    effective_enforce_trusted_repo = _resolve_trusted_repo_enforcement(
+        agent_kind=agent,
+        repo_id=effective_repo_id,
+        revision=effective_revision,
+        trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
+        enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        allow_untrusted_repo=allow_untrusted_repo,
+        yes=yes,
+    )
 
     effective_env_kwargs: dict[str, Any] = {}
     if env is None or env_id == config.run.env_id:
@@ -348,7 +464,7 @@ def smoketest(
         sb3_repo_id=effective_repo_id,
         sb3_filename=effective_filename,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
-        enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        enforce_trusted_repo=effective_enforce_trusted_repo,
         sb3_revision=effective_revision,
         sb3_algorithm=config.agent.sb3_algorithm,
         sb3_device=config.agent.device,
@@ -564,6 +680,19 @@ def run(
         "--revision",
         help="Optional Hugging Face commit SHA, tag, or branch for SB3 download.",
     ),
+    allow_untrusted_repo: bool = typer.Option(
+        False,
+        "--allow-untrusted-repo",
+        help=(
+            "Allow SB3 policy loading when trust enforcement is disabled or the "
+            "repo id is outside trusted prefixes."
+        ),
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Skip the interactive untrusted-repo confirmation prompt.",
+    ),
     voice: bool | None = typer.Option(
         None,
         "--voice/--no-voice",
@@ -656,6 +785,15 @@ def run(
         effective_repo_id = policy
         if filename is None:
             effective_filename = f"{policy.rsplit('/', maxsplit=1)[-1]}.zip"
+    effective_enforce_trusted_repo = _resolve_trusted_repo_enforcement(
+        agent_kind=effective_agent,
+        repo_id=effective_repo_id,
+        revision=effective_revision,
+        trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
+        enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        allow_untrusted_repo=allow_untrusted_repo,
+        yes=yes,
+    )
 
     effective_env_kwargs: dict[str, Any] = {}
     if env is None or env_id == config.run.env_id:
@@ -714,7 +852,7 @@ def run(
         sb3_device=config.agent.device,
         sb3_revision=effective_revision,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
-        enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        enforce_trusted_repo=effective_enforce_trusted_repo,
         voice_enabled=effective_voice,
         tts_engine=config.tts.engine,
         tts_voice=config.tts.kokoro.voice,
@@ -793,6 +931,19 @@ def tune_prompt(
         "--revision",
         help="Optional Hugging Face commit SHA, tag, or branch for SB3 download.",
     ),
+    allow_untrusted_repo: bool = typer.Option(
+        False,
+        "--allow-untrusted-repo",
+        help=(
+            "Allow SB3 policy loading when trust enforcement is disabled or the "
+            "repo id is outside trusted prefixes."
+        ),
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        help="Skip the interactive untrusted-repo confirmation prompt.",
+    ),
     wait_for_vlm: bool = typer.Option(
         False,
         "--wait-for-vlm",
@@ -839,6 +990,15 @@ def tune_prompt(
         effective_repo_id = policy
         if filename is None:
             effective_filename = f"{policy.rsplit('/', maxsplit=1)[-1]}.zip"
+    effective_enforce_trusted_repo = _resolve_trusted_repo_enforcement(
+        agent_kind=effective_agent,
+        repo_id=effective_repo_id,
+        revision=effective_revision,
+        trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
+        enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        allow_untrusted_repo=allow_untrusted_repo,
+        yes=yes,
+    )
 
     effective_env_kwargs: dict[str, Any] = {}
     if env is None or env_id == config.run.env_id:
@@ -887,7 +1047,7 @@ def tune_prompt(
         sb3_device=config.agent.device,
         sb3_revision=effective_revision,
         trusted_repo_prefixes=config.agent.trusted_repo_prefixes,
-        enforce_trusted_repo=config.agent.enforce_trusted_repo,
+        enforce_trusted_repo=effective_enforce_trusted_repo,
         env_kwargs=effective_env_kwargs,
     )
 
