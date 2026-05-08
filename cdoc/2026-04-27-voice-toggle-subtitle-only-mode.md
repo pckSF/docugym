@@ -2,9 +2,9 @@
 type: decision
 tags: [narration, tts, subtitles, performance, testing, stage-5]
 created: 2026-04-27
-updated: 2026-04-27
+updated: 2026-05-08
 status: active
-related: [stage-4-vlm-narration-sync.md, stage-3-display-layer.md, stage-5-local-tts-streaming-audio.md, stage-6-async-orchestration-and-keyframe-selection.md, stage-7-ui-polish-and-keyboard-controls.md]
+related: [stage-4-vlm-narration-sync.md, stage-3-display-layer.md, stage-5-local-tts-streaming-audio.md, stage-6-async-orchestration-and-keyframe-selection.md, stage-7-ui-polish-and-keyboard-controls.md, subtitle-only-default-cli-policy.md]
 ---
 
 # 2026-04-27 Voice Toggle and Subtitle-Only Mode
@@ -66,7 +66,11 @@ Option 2 is selected.
 The architecture should preserve text narration as the core output and treat
 voice as a toggleable rendering channel. The expected interface is a runtime
 flag (for example `--voice/--no-voice`) with a matching config field (for
-example `tts.enabled`) defaulting to enabled.
+example `tts.enabled`).
+
+Default-policy update (2026-05-08): the default-enabled assumption in this note
+is superseded by `subtitle-only-default-cli-policy.md`, which makes subtitle-only
+the baseline and voice explicit opt-in.
 
 ## Changelog
 
@@ -78,3 +82,5 @@ example `tts.enabled`) defaulting to enabled.
 - 2026-05-07: Linked Stage 6 implementation note documenting async orchestration
   while preserving subtitle-only operation.
 - 2026-05-07: Linked Stage 7 UI note documenting runtime mute shortcut behavior.
+- 2026-05-08: Updated to mark the original default-enabled assumption as
+  superseded by `subtitle-only-default-cli-policy.md`.

@@ -2,9 +2,9 @@
 type: log
 tags: [documentation, docstrings, python-style, maintainability]
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-08
 status: active
-related: [2026-05-07-code-review-remediation-scope.md]
+related: [2026-05-07-code-review-remediation-scope.md, 2026-05-08-documentation-governance-and-reference-uplift.md]
 ---
 # 2026-05-07 Docstring Standardization Pass
 ## Context
@@ -62,3 +62,6 @@ Third-pass updates (same date) completed project-wide consistency:
   documentation on complex APIs, including examples and deeper behavior guidance.
 - 2026-05-07: Updated with a project-wide consistency pass that removed all
   remaining one-line public API docstrings and aligned helper/protocol docs.
+- 2026-05-08: Linked follow-up governance log documenting checker-level policy,
+  strict pre-commit enforcement, README architecture uplift, and reference-doc
+  rollout.
