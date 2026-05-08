@@ -137,7 +137,7 @@ class TTSSettings(BaseModel):
         xtts: XTTS backend settings.
     """
 
-    enabled: bool = True
+    enabled: bool = False
     engine: Literal["kokoro", "xtts", "chatterbox"] = "kokoro"
     kokoro: KokoroSettings = Field(default_factory=KokoroSettings)
     xtts: XTTSSettings = Field(default_factory=XTTSSettings)

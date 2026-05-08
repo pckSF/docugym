@@ -33,7 +33,7 @@ narration:
   previous_narration_window: 2
 
 tts:
-  enabled: true
+  enabled: false
   engine: "kokoro"
   kokoro:
     voice: "bm_george"

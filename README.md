@@ -50,14 +50,17 @@ Primary use cases:
 sudo apt-get update && sudo apt-get install -y ffmpeg
 ```
 
-2. Install project dependencies:
+2. Install lightweight default dependencies (subtitle-only runtime):
 
 ```bash
-uv sync --extra voice --extra vlm
+uv sync --extra vlm
 ```
 
-Use `uv sync` when you only need subtitle-only mode against an already managed VLM
-endpoint.
+3. Install voice dependencies only when you want spoken narration:
+
+```bash
+uv sync --extra vlm --extra voice
+```
 
 ## Quickstart
 
@@ -73,10 +76,10 @@ scripts/serve_vlm.sh
 docugym run --config configs/atari.yaml --wait-for-vlm
 ```
 
-3. Run subtitle-only mode:
+3. Enable voiced narration when you want audio (opt-in):
 
 ```bash
-docugym run --config configs/lunarlander.yaml --no-voice --wait-for-vlm
+docugym run --config configs/lunarlander.yaml --voice --wait-for-vlm
 ```
 
 4. Override environment or policy at runtime:
@@ -124,6 +127,9 @@ Key properties:
 
 Use `docugym run` for production-like narrated sessions, preset-driven workflows,
 and recording.
+
+With the default config, CLI runs start in subtitle-only mode
+(`tts.enabled: false`). Use `--voice` when you want spoken narration.
 
 ### Wrapper Mode
 
@@ -229,7 +235,8 @@ Model guidance:
 	first model load may take around 60-120 seconds. Use `--wait-for-vlm` and raise
 	`--wait-timeout` when needed.
 - GPU memory pressure:
-	reduce model size or run subtitle-only mode via `--no-voice`.
+	keep subtitle-only mode (default), or disable voice with `--no-voice` if you
+	explicitly enabled it with `--voice`.
 - First narration is delayed:
 	this is usually model prefill cost; warm up sidecar before long sessions.
 - SB3 checkpoint mismatch:

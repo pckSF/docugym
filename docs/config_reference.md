@@ -70,7 +70,7 @@ Examples:
 
 ### tts
 
-- `enabled` (`bool`, default `true`)
+- `enabled` (`bool`, default `false`)
 - `engine` (`kokoro | xtts | chatterbox`, default `kokoro`)
 - `kokoro.voice` (`str`, default `bm_george`)
 - `kokoro.speed` (`float`, default `0.95`)
