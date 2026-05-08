@@ -13,6 +13,12 @@ It is designed for single-machine execution with local VLM narration and local T
 
 If you can render a Gym frame, DocuGym can narrate it.
 
+This project was an experiment in pure agentic coding without any manual code
+interaction; every change, no matter how small, had to go through an agent.
+DocuGym is something I always wanted but never needed, which made it the
+perfect excuse to finally try the experiment.
+
+
 ## Table of Contents
 
 - [Why DocuGym](#why-docugym)
