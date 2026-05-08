@@ -189,3 +189,17 @@ Restart the sidecar after changing `vlm.model` so the new model loads.
 	reduce synthesis pressure; stale narration candidates are dropped by design.
 - Recording fails immediately on startup:
 	ensure `ffmpeg` is installed and visible in `PATH`, or run without `--record`.
+
+## Documentation Quality Standard
+
+Docstring and written documentation quality is governed by
+`docs/documentation_contract.md`.
+
+To run the checker directly:
+
+```bash
+python3 scripts/check_doc_quality.py --strict docugym tests
+```
+
+The checker is also wired into pre-commit as an initial visibility gate while
+the remaining documentation backlog is being completed.

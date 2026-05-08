@@ -38,6 +38,11 @@ repos:
 
 - repo: local
   hooks:
+  - id: doc-quality
+    name: doc quality
+    entry: python3 scripts/check_doc_quality.py --strict
+    language: system
+    types_or: [python]
   - id: ty-check
     name: ty check
     entry: uvx ty==0.0.32 check
