@@ -1,52 +1,85 @@
 # DocuGym
 
-DocuGym is a fully local desktop application that watches a live Gymnasium game,
-turns key moments into calm nature-documentary narration, and speaks that narration
-alongside gameplay. The project targets a single-machine setup (RTX 3090 Ti class)
-with local inference for both vision-language narration and text-to-speech.
+DocuGym is a fully local desktop application that turns live Gymnasium runs into
+nature-documentary-style experiences with synchronized subtitles and optional voice.
+It is designed for single-machine execution with local VLM narration and local TTS.
 
-The long-term goal is a smooth, game-window-first viewing experience where narration
-lags gameplay by about one to two seconds but still feels synchronized and informative.
+If you can render a Gym frame, DocuGym can narrate it.
 
-## Quickstart
+## Table of Contents
 
-1. Install ffmpeg (required for optional recording):
+- [Why DocuGym](#why-docugym)
+- [System Requirements](#system-requirements)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [Architecture Snapshot](#architecture-snapshot)
+- [Run Modes](#run-modes)
+- [CLI Command Map](#cli-command-map)
+- [Prompt Tuning](#prompt-tuning)
+- [Runtime Shortcuts](#runtime-shortcuts)
+- [Recording](#recording)
+- [Troubleshooting](#troubleshooting)
+- [Development Workflow](#development-workflow)
+- [Reference Docs](#reference-docs)
+- [Documentation Quality Standard](#documentation-quality-standard)
+- [Design and Decision Logs](#design-and-decision-logs)
+
+## Why DocuGym
+
+DocuGym exists for sessions where silent gameplay is hard to interpret in real time.
+It narrates key events without requiring cloud APIs and keeps playback responsive by
+using bounded queues and asynchronous orchestration.
+
+Primary use cases:
+- Live narrated evaluation runs for RL environments.
+- Prompt and model iteration for narration style.
+- Wrapper-mode integration into existing Gym control loops.
+
+## System Requirements
+
+- Python 3.11+.
+- Linux workstation with an NVIDIA GPU recommended for local VLM + TTS.
+- `ffmpeg` in `PATH` for optional MP4 recording.
+- Optional: a local OpenAI-compatible endpoint (for example vLLM) for narration.
+
+## Installation
+
+1. Install system dependency for recording:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y ffmpeg
 ```
 
-2. Install project dependencies, including the local voice and VLM sidecar extras:
+2. Install project dependencies:
 
 ```bash
 uv sync --extra voice --extra vlm
 ```
 
-For subtitle-only runs against an already managed VLM endpoint, `uv sync` is enough.
+Use `uv sync` when you only need subtitle-only mode against an already managed VLM
+endpoint.
 
-3. Start the local VLM sidecar:
+## Quickstart
+
+1. Start the local VLM sidecar:
 
 ```bash
 scripts/serve_vlm.sh
 ```
 
-The sidecar binds to `127.0.0.1` by default. To bind a non-loopback host, set
-both `DOCUGYM_VLM_HOST` and `DOCUGYM_VLM_ALLOW_PUBLIC=1`, and put the endpoint
-behind appropriate network controls.
-
-4. In another terminal, run with a preset config:
+2. Start a narrated run from a preset:
 
 ```bash
 docugym run --config configs/atari.yaml --wait-for-vlm
 ```
 
-5. Run subtitle-only narration when you want lower compute or silent playback:
+3. Run subtitle-only mode:
 
 ```bash
 docugym run --config configs/lunarlander.yaml --no-voice --wait-for-vlm
 ```
 
-6. Override config values from the command line when needed:
+4. Override environment or policy at runtime:
 
 ```bash
 docugym run \
@@ -56,26 +89,45 @@ docugym run \
 	--wait-for-vlm
 ```
 
-7. Record a narrated run to MP4 (optional):
+5. Record to MP4:
 
 ```bash
 docugym run --config configs/atari.yaml --record out/session.mp4 --wait-for-vlm
 ```
 
-The `run` command renders the live PyGame window, keeps gameplay smooth with an
-async pipeline, and updates subtitles from narration text returned by the local
-OpenAI-compatible VLM endpoint.
+## Architecture Snapshot
 
-## Presets and Discovery Commands
+DocuGym runtime keeps gameplay smooth by decoupling frame production from narration
+and speech generation.
 
-- `docugym list-envs`: show supported preset configs and their effective env/policy.
-- `docugym list-voices`: show Kokoro's 8 British voices and sample lines.
-- `docugym run --config configs/carracing.yaml`: start from a Box2D preset.
+```text
+Gym Env -> Frame Stream -> Keyframe Selector -> Narrator (VLM)
+	 |                               |                 |
+	 |                               v                 v
+	 +------------------------> Display <------ Subtitle/Text
+																	 |
+																	 v
+												 Optional TTS -> Audio Output
+																	 |
+																	 v
+													 Optional MP4 Recorder
+```
 
-## Wrapper Mode for Experiments
+Key properties:
+- Freshness-biased queues drop stale narration work under pressure.
+- Display updates are independent from narration latency.
+- Voice is optional and can be toggled at runtime.
 
-Use wrapper mode when you want to keep a normal Gymnasium training or control
-loop but still get live DocuGym narration and subtitles.
+## Run Modes
+
+### CLI Run Mode
+
+Use `docugym run` for production-like narrated sessions, preset-driven workflows,
+and recording.
+
+### Wrapper Mode
+
+Use wrapper mode when you need Gym-style `reset`/`step` control flow.
 
 ```python
 import gymnasium as gym
@@ -84,49 +136,54 @@ from docugym import docuwrapper
 
 env = gym.make("CartPole-v1", render_mode="rgb_array")
 env = docuwrapper(
-	env,
-	env_id="CartPole-v1",
-	voice_enabled=False,
-	narration_interval_seconds=3.0,
-	reward_spike_threshold=0.5,
+		env,
+		env_id="CartPole-v1",
+		voice_enabled=False,
+		narration_interval_seconds=3.0,
+		reward_spike_threshold=0.5,
 )
 
 obs, info = env.reset(seed=42)
 for _ in range(300):
-	action = env.action_space.sample()
-	obs, reward, terminated, truncated, info = env.step(action)
-	if terminated or truncated:
-		obs, info = env.reset()
+		action = env.action_space.sample()
+		obs, reward, terminated, truncated, info = env.step(action)
+		if terminated or truncated:
+				obs, info = env.reset()
 
 env.close()
 ```
 
 Wrapper behavior notes:
-- It keeps Gym-style `reset` and `step` usage and always opens the DocuGym window.
-- Narration metadata is added to `info["docugym"]` on `reset` and `step`.
-- Optional callbacks can be passed at initialization for narration/subtitle/audio/status events.
-- `space` pauses frame progression until toggled again, `n` forces narration,
-  `m` toggles mute, and `s` saves a clip snapshot.
+- It preserves Gym-style action loop semantics.
+- It adds live diagnostics in `info["docugym"]`.
+- It supports callbacks for narration, subtitles, audio chunks, and status.
 
-Use `docugym run` for production runs and recording workflows. Use wrapper mode
-for experimentation in custom control loops.
+## CLI Command Map
 
-## Tuning and Eval
+- `docugym list-envs`: print packaged presets and policy hints.
+- `docugym list-voices`: print curated Kokoro voice ids and samples.
+- `docugym show-config`: print effective merged settings JSON.
+- `docugym smoketest`: capture PNG frames for render/path validation.
+- `docugym display-smoketest`: validate rendering without narration/TTS.
+- `docugym run`: execute full narrated session pipeline.
+- `docugym tune prompt`: collect fixed-stride narration samples.
 
-Use prompt tuning to run narrations over varied frames and compare style changes:
+## Prompt Tuning
+
+Collect comparable narration samples:
 
 ```bash
 docugym tune prompt --env ALE/SpaceInvaders-v5 --samples 20 --wait-for-vlm
 ```
 
-Useful tuning flags:
-- `--step-stride`: number of env steps between samples (higher gives more variety).
-- `--seed`: repeatable sample sequence for A/B comparisons.
-- `--policy` or `--agent`: align tuning with your runtime control path.
+High-leverage flags:
+- `--step-stride`: wider scene diversity across samples.
+- `--seed`: reproducible frame sampling for A/B runs.
+- `--policy` or `--agent`: align tuning path with runtime behavior.
 
-### How to make narration sound more like a nature documentary
+### Narrative Style Tuning
 
-1. Try a different Kokoro voice:
+1. Try a different voice:
 
 ```yaml
 tts:
@@ -134,7 +191,7 @@ tts:
 		voice: "bm_fable"
 ```
 
-2. Space out narration to reduce chatter and keep lines more deliberate:
+2. Space out narration for calmer pacing:
 
 ```yaml
 narration:
@@ -142,7 +199,7 @@ narration:
 	min_gap_seconds: 2.0
 ```
 
-3. Adjust model size for your GPU and style preference:
+3. Pick model size by quality and latency budget:
 
 ```yaml
 vlm:
@@ -150,56 +207,67 @@ vlm:
 ```
 
 Model guidance:
-- `Qwen/Qwen3-VL-4B-Instruct`: faster and lighter.
+- `Qwen/Qwen3-VL-4B-Instruct`: lower memory, faster responses.
 - `Qwen/Qwen3-VL-8B-Instruct-AWQ`: higher quality baseline.
-
-Restart the sidecar after changing `vlm.model` so the new model loads.
 
 ## Runtime Shortcuts
 
 - `space`: pause or resume environment stepping.
-- `n`: force narration for the current frame.
-- `m`: mute or unmute voiced narration (subtitles continue).
-- `s`: save the current frame and latest narration text to `out/clips/`.
+- `n`: force narration on current frame.
+- `m`: mute or unmute voiced narration.
+- `s`: save frame + narration clip snapshot to `out/clips/`.
 
-## Recording (Optional)
+## Recording
 
-- Use `--record out/session.mp4` to save gameplay + narration audio as MP4.
-- If `recording.enabled: true` is set in your config, `docugym run` records to
-	`recording.out_path` unless `--record` overrides it.
-- Recording requires a system `ffmpeg` binary in `PATH`.
-- Zero-code alternative: you can capture the PyGame window + system audio with OBS.
+- Use `--record out/session.mp4` for combined gameplay + narration audio.
+- If `recording.enabled: true` is set, `recording.out_path` is used by default.
+- Recording requires `ffmpeg` on the system path.
 
 ## Troubleshooting
 
-- vLLM startup appears slow:
-	first model load can take around 60-120 seconds. Use `--wait-for-vlm` and
-	increase `--wait-timeout` if needed.
-- GPU out-of-memory under load:
-	budget roughly 9-11 GB for vLLM (Qwen3-VL-8B-AWQ) + 1.5 GB for Kokoro +
-	about 1 GB runtime overhead. Reduce model size or disable voice (`--no-voice`)
-	if memory pressure is high.
-- First narration is noticeably delayed:
-	the first request pays model prefill cost. Warm up the sidecar before runs.
-- SB3 checkpoint mismatch on Box2D/Atari:
-	many SB3 checkpoints are version-specific (for example `ppo-LunarLander-v2`
-	and Atari `*NoFrameskip-v4`). Use matching env ids when possible.
-- Audio glitches during high narration density:
-	increase `narration.interval_seconds` or `narration.min_gap_seconds` to
-	reduce synthesis pressure; stale narration candidates are dropped by design.
-- Recording fails immediately on startup:
-	ensure `ffmpeg` is installed and visible in `PATH`, or run without `--record`.
+- Sidecar startup looks slow:
+	first model load may take around 60-120 seconds. Use `--wait-for-vlm` and raise
+	`--wait-timeout` when needed.
+- GPU memory pressure:
+	reduce model size or run subtitle-only mode via `--no-voice`.
+- First narration is delayed:
+	this is usually model prefill cost; warm up sidecar before long sessions.
+- SB3 checkpoint mismatch:
+	checkpoint env ids are often version-specific (`*NoFrameskip-v4`, `v2`, and so on).
+- Recording fails immediately:
+	verify `ffmpeg` is installed and available in `PATH`.
 
-## Documentation Quality Standard
+## Development Workflow
 
-Docstring and written documentation quality is governed by
-`docs/documentation_contract.md`.
-
-To run the checker directly:
+Run quality checks locally:
 
 ```bash
 python3 scripts/check_doc_quality.py --strict docugym tests
+uv run ruff check .
+uv run pytest -q
 ```
 
-The checker is also wired into pre-commit as an initial visibility gate while
-the remaining documentation backlog is being completed.
+Pre-commit also runs doc-quality, lint, formatting, type checks, and tests.
+
+## Reference Docs
+
+- API entrypoints and callback contracts: `docs/api_reference.md`
+- Configuration schema and defaults: `docs/config_reference.md`
+
+## Documentation Quality Standard
+
+Documentation policy and expected depth are defined in `docs/documentation_contract.md`.
+
+The doc-quality checker validates:
+- Presence coverage (module/class/public callable).
+- Required section headers (`Args`, `Returns`, `Raises`) when applicable.
+- Documentation depth levels: `bare`, `minimal`, `standard`, `rich`.
+
+Default level thresholds:
+- Core code: `standard` minimum.
+- Tests: `minimal` minimum.
+
+## Design and Decision Logs
+
+- Architecture and implementation plan: `specification.md`
+- Decision and audit log history: `cdoc/`
