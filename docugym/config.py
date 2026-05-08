@@ -18,7 +18,9 @@ from pydantic_settings import (
     YamlConfigSettingsSource,
 )
 
-DEFAULT_CONFIG_PATH = Path("configs/default.yaml")
+from docugym.config_files import DEFAULT_CONFIG_NAME, resolved_config_path
+
+DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_NAME
 
 
 class RunSettings(BaseModel):
@@ -93,6 +95,7 @@ class NarrationSettings(BaseModel):
         pixel_delta_threshold: Visual-delta trigger threshold.
         max_context_events: Number of recent events retained in prompt context.
         previous_narration_window: Number of previous narrations retained.
+        system_prompt: Optional narrator system prompt override.
     """
 
     interval_seconds: float = 3.0
@@ -101,6 +104,7 @@ class NarrationSettings(BaseModel):
     pixel_delta_threshold: float = 8.0
     max_context_events: int = 3
     previous_narration_window: int = 2
+    system_prompt: str | None = None
 
 
 class KokoroSettings(BaseModel):
@@ -207,7 +211,7 @@ class AppSettings(BaseSettings):
         extra="ignore",
     )
 
-    _yaml_path: ClassVar[Path] = DEFAULT_CONFIG_PATH
+    _yaml_path: ClassVar[Path] = Path("configs/default.yaml")
 
     @classmethod
     def settings_customise_sources(
@@ -241,19 +245,20 @@ class AppSettings(BaseSettings):
         )
 
 
-def load_settings(config_path: Path | str = DEFAULT_CONFIG_PATH) -> AppSettings:
+def load_settings(config_path: Path | str | None = DEFAULT_CONFIG_PATH) -> AppSettings:
     """Load app settings from YAML with environment-variable overrides.
 
     Args:
-        config_path: YAML configuration file path.
+        config_path: YAML configuration file path, packaged preset name, or
+            ``None`` for the default preset.
 
     Returns:
         Validated application settings model.
     """
 
-    yaml_path = Path(config_path)
+    with resolved_config_path(config_path) as yaml_path:
 
-    class SettingsWithYaml(AppSettings):
-        _yaml_path: ClassVar[Path] = yaml_path
+        class SettingsWithYaml(AppSettings):
+            _yaml_path: ClassVar[Path] = yaml_path
 
-    return SettingsWithYaml()
+        return SettingsWithYaml()

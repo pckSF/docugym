@@ -41,6 +41,23 @@ vlm = [
 [project.scripts]
 docugym = "docugym.cli:app"
 
+[tool.hatch.build.targets.sdist]
+include = [
+  "/cdoc",
+  "/configs",
+  "/docs",
+  "/docugym",
+  "/tests",
+  "/README.md",
+  "/pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["docugym"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"configs" = "docugym/configs"
+
 [dependency-groups]
 dev = [
   "pre-commit>=4.0,<5",
