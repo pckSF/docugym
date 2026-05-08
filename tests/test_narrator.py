@@ -9,8 +9,10 @@ from typing import Any, Self, cast
 
 from PIL import Image
 import numpy as np
+import pytest
 
 from docugym.narrator import NarrationContext, VLMNarrator
+from docugym.prompts import get_system_prompt, reset_system_prompt, set_system_prompt
 
 
 class _FakeResponse:
@@ -120,6 +122,78 @@ def test_narrate_frame_sync_posts_multimodal_payload(monkeypatch) -> None:
     raw_bytes = base64.b64decode(data_url.split(",", maxsplit=1)[1])
     image = Image.open(BytesIO(raw_bytes))
     assert max(image.size) <= 384
+
+
+def test_global_system_prompt_override_is_used(monkeypatch) -> None:
+    capture: dict[str, Any] = {}
+
+    def fake_async_client(*_args: object, **_kwargs: object) -> _FakeAsyncClient:
+        return _FakeAsyncClient(capture)
+
+    monkeypatch.setattr("docugym.narrator.httpx.AsyncClient", fake_async_client)
+
+    set_system_prompt("Narrate with terse field notes.")
+    try:
+        narrator = VLMNarrator(
+            base_url="http://localhost:8000/v1",
+            model="Qwen/Qwen3-VL-8B-Instruct-AWQ",
+            max_tokens=80,
+            temperature=0.8,
+            top_p=0.9,
+        )
+        narrator.narrate_frame_sync(
+            frame=np.zeros((8, 8, 3), dtype=np.uint8),
+            context=NarrationContext(env_human_name="CartPole v1"),
+        )
+    finally:
+        reset_system_prompt()
+
+    payload = cast("dict[str, Any]", capture["post_json"])
+    messages = cast("list[dict[str, Any]]", payload["messages"])
+    assert messages[0]["content"] == "Narrate with terse field notes."
+
+
+def test_instance_system_prompt_overrides_global_prompt(monkeypatch) -> None:
+    capture: dict[str, Any] = {}
+
+    def fake_async_client(*_args: object, **_kwargs: object) -> _FakeAsyncClient:
+        return _FakeAsyncClient(capture)
+
+    monkeypatch.setattr("docugym.narrator.httpx.AsyncClient", fake_async_client)
+
+    set_system_prompt("Global prompt.")
+    try:
+        narrator = VLMNarrator(
+            base_url="http://localhost:8000/v1",
+            model="Qwen/Qwen3-VL-8B-Instruct-AWQ",
+            max_tokens=80,
+            temperature=0.8,
+            top_p=0.9,
+            system_prompt="Instance prompt.",
+        )
+        narrator.narrate_frame_sync(
+            frame=np.zeros((8, 8, 3), dtype=np.uint8),
+            context=NarrationContext(env_human_name="CartPole v1"),
+        )
+    finally:
+        reset_system_prompt()
+
+    payload = cast("dict[str, Any]", capture["post_json"])
+    messages = cast("list[dict[str, Any]]", payload["messages"])
+    assert messages[0]["content"] == "Instance prompt."
+
+
+def test_system_prompt_helpers_reject_blank_and_reset() -> None:
+    original_prompt = get_system_prompt()
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        set_system_prompt("   ")
+
+    set_system_prompt("Temporary prompt.")
+    assert get_system_prompt() == "Temporary prompt."
+
+    reset_system_prompt()
+    assert get_system_prompt() == original_prompt
 
 
 def test_narrate_frame_reuses_async_client_until_closed(monkeypatch) -> None:

@@ -7,6 +7,7 @@ configuration model can be used interactively and in scripted environments.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 import json
 import logging
 from pathlib import Path
@@ -16,12 +17,12 @@ import typer
 import yaml
 
 from docugym.config import AppSettings, load_settings
-from docugym.display import run_display_smoketest
-from docugym.env import run_smoketest
+from docugym.config_files import (
+    ConfigNotFoundError,
+    RUNTIME_CONFIG_PRESET_NAMES,
+    resolved_config_path,
+)
 from docugym.logging_config import configure_logging
-from docugym.narrator import VLMNarrator
-from docugym.runtime import run_session_sync
-from docugym.tune import run_prompt_tuning
 
 app = typer.Typer(
     add_completion=False,
@@ -35,6 +36,11 @@ tune_app = typer.Typer(
 )
 app.add_typer(tune_app, name="tune")
 logger = logging.getLogger(__name__)
+run_display_smoketest: Any | None = None
+run_prompt_tuning: Any | None = None
+run_session_sync: Any | None = None
+run_smoketest: Any | None = None
+VLMNarrator: Any | None = None
 
 _KOKORO_BRITISH_VOICE_SAMPLES: tuple[tuple[str, str], ...] = (
     (
@@ -71,8 +77,23 @@ _KOKORO_BRITISH_VOICE_SAMPLES: tuple[tuple[str, str], ...] = (
     ),
 )
 
-_PRESET_NAMES: tuple[str, ...] = ("atari", "lunarlander", "carracing")
 
+def _load_cli_dependency(name: str, module_name: str) -> Any:
+    """Resolve a heavy CLI collaborator only when a command needs it.
+
+    Args:
+        name: Module-level dependency name used by command handlers and tests.
+        module_name: Import path containing the concrete dependency.
+
+    Returns:
+        Dependency object, using a monkeypatched module global when present.
+    """
+
+    dependency = globals()[name]
+    if dependency is None:
+        dependency = getattr(import_module(module_name), name)
+        globals()[name] = dependency
+    return dependency
 
 @dataclass(slots=True)
 class AppState:
@@ -80,11 +101,12 @@ class AppState:
 
     Attributes:
         settings: Effective application settings after source merging.
-        config_path: Configuration file path used to build ``settings``.
+        config_ref: Preset name or configuration file path used to build
+            ``settings``.
     """
 
     settings: AppSettings
-    config_path: Path
+    config_ref: str
 
 
 def _get_state(ctx: typer.Context) -> AppState:
@@ -150,14 +172,11 @@ def _load_preset_settings(config_path: Path) -> AppSettings:
 @app.callback()
 def main(
     ctx: typer.Context,
-    config: Path = typer.Option(
-        Path("configs/default.yaml"),
+    config: str = typer.Option(
+        "default",
         "--config",
         "-c",
-        exists=True,
-        dir_okay=False,
-        readable=True,
-        help="Path to YAML configuration file.",
+        help="YAML config path or packaged preset name.",
     ),
     log_level: str = typer.Option("INFO", help="Python logging level."),
 ) -> None:
@@ -168,13 +187,22 @@ def main(
 
     Args:
         ctx: Typer context used to store shared application state.
-        config: YAML configuration file used to populate ``AppSettings``.
+        config: YAML file path or packaged preset name used to populate
+            ``AppSettings``.
         log_level: Logging verbosity passed to runtime logger configuration.
+
+    Raises:
+        typer.BadParameter: If ``config`` is neither a known preset nor an
+            existing YAML file.
     """
 
     configure_logging(log_level)
-    settings = load_settings(config)
-    ctx.obj = AppState(settings=settings, config_path=config)
+    try:
+        settings = load_settings(config)
+    except ConfigNotFoundError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--config") from exc
+
+    ctx.obj = AppState(settings=settings, config_ref=config)
     logger.debug("Loaded configuration from %s", config)
 
 
@@ -219,15 +247,12 @@ def list_envs() -> None:
         ``None``. Prints one line per discovered preset.
     """
 
-    config_dir = Path("configs")
     typer.echo("Supported env presets:")
 
     found = False
-    for preset_name in _PRESET_NAMES:
-        preset_path = config_dir / f"{preset_name}.yaml"
-        if not preset_path.exists():
-            continue
-        settings = _load_preset_settings(preset_path)
+    for preset_name in RUNTIME_CONFIG_PRESET_NAMES:
+        with resolved_config_path(preset_name) as preset_path:
+            settings = _load_preset_settings(preset_path)
         policy = settings.agent.sb3_repo_id if settings.agent.kind == "sb3" else "n/a"
         typer.echo(
             "- "
@@ -237,7 +262,7 @@ def list_envs() -> None:
         found = True
 
     if not found:
-        typer.echo("- no presets found in configs/")
+        typer.echo("- no presets found")
 
 
 @app.command("smoketest")
@@ -312,7 +337,8 @@ def smoketest(
         effective_env_kwargs.update(config.run.env_kwargs)
     effective_env_kwargs.update(_parse_env_kwargs(env_kwargs))
 
-    frame_paths = run_smoketest(
+    smoke_runner = _load_cli_dependency("run_smoketest", "docugym.env")
+    frame_paths = smoke_runner(
         env_id=env_id,
         seed=effective_seed,
         steps=steps,
@@ -428,7 +454,11 @@ def display_smoketest(
         effective_env_kwargs.update(config.run.env_kwargs)
     effective_env_kwargs.update(_parse_env_kwargs(env_kwargs))
 
-    rendered_steps = run_display_smoketest(
+    display_smoke_runner = _load_cli_dependency(
+        "run_display_smoketest",
+        "docugym.display",
+    )
+    rendered_steps = display_smoke_runner(
         env_id=env_id,
         seed=effective_seed,
         fps=effective_fps,
@@ -632,13 +662,15 @@ def run(
         effective_env_kwargs.update(config.run.env_kwargs)
     effective_env_kwargs.update(_parse_env_kwargs(env_kwargs))
 
-    narrator = VLMNarrator(
+    narrator_class = _load_cli_dependency("VLMNarrator", "docugym.narrator")
+    narrator = narrator_class(
         base_url=config.vlm.base_url,
         model=config.vlm.model,
         max_tokens=config.vlm.max_tokens,
         temperature=config.vlm.temperature,
         top_p=config.vlm.top_p,
         image_detail=config.vlm.image_detail,
+        system_prompt=config.narration.system_prompt,
     )
 
     if wait_for_vlm:
@@ -655,7 +687,8 @@ def run(
             )
             raise typer.Exit(code=1)
 
-    result = run_session_sync(
+    session_runner = _load_cli_dependency("run_session_sync", "docugym.runtime")
+    result = session_runner(
         env_id=env_id,
         seed=effective_seed,
         fps=effective_fps,
@@ -812,13 +845,15 @@ def tune_prompt(
         effective_env_kwargs.update(config.run.env_kwargs)
     effective_env_kwargs.update(_parse_env_kwargs(env_kwargs))
 
-    narrator = VLMNarrator(
+    narrator_class = _load_cli_dependency("VLMNarrator", "docugym.narrator")
+    narrator = narrator_class(
         base_url=config.vlm.base_url,
         model=config.vlm.model,
         max_tokens=config.vlm.max_tokens,
         temperature=config.vlm.temperature,
         top_p=config.vlm.top_p,
         image_detail=config.vlm.image_detail,
+        system_prompt=config.narration.system_prompt,
     )
 
     if wait_for_vlm:
@@ -835,7 +870,11 @@ def tune_prompt(
             )
             raise typer.Exit(code=1)
 
-    results = run_prompt_tuning(
+    prompt_tuning_runner = _load_cli_dependency(
+        "run_prompt_tuning",
+        "docugym.tune",
+    )
+    results = prompt_tuning_runner(
         env_id=env_id,
         seed=effective_seed,
         samples=samples,

@@ -4,11 +4,28 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import subprocess
+import sys
 from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
 from docugym.cli import app
+
+
+def test_cli_module_import_does_not_eagerly_load_display() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys, docugym.cli; print('docugym.display' in sys.modules)",
+        ],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == "False"
 
 
 def test_smoketest_command_invokes_runner(monkeypatch, tmp_path: Path) -> None:
@@ -704,6 +721,21 @@ def test_list_envs_prints_presets(tmp_path: Path) -> None:
 
     runner = CliRunner()
     result = runner.invoke(app, ["--config", str(config_path), "list-envs"])
+
+    assert result.exit_code == 0
+    assert "atari" in result.output
+    assert "lunarlander" in result.output
+    assert "carracing" in result.output
+
+
+def test_list_envs_works_outside_repo_cwd(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["list-envs"])
 
     assert result.exit_code == 0
     assert "atari" in result.output

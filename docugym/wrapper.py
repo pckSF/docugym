@@ -124,6 +124,7 @@ class DocuWrapper(gym.Wrapper):
         temperature: float = 0.8,
         top_p: float = 0.9,
         image_detail: str = "low",
+        system_prompt: str | None = None,
         narration_interval_seconds: float = 3.0,
         min_gap_seconds: float = 1.5,
         reward_spike_threshold: float = 5.0,
@@ -164,6 +165,7 @@ class DocuWrapper(gym.Wrapper):
             temperature: Narration sampling temperature.
             top_p: Nucleus sampling parameter.
             image_detail: Image payload detail level for VLM requests.
+            system_prompt: Optional per-wrapper narrator system prompt override.
             narration_interval_seconds: Baseline cadence trigger interval.
             min_gap_seconds: Cooldown between accepted narration requests.
             reward_spike_threshold: Absolute reward threshold that triggers
@@ -213,6 +215,7 @@ class DocuWrapper(gym.Wrapper):
             temperature=temperature,
             top_p=top_p,
             image_detail=image_detail,
+            system_prompt=system_prompt,
         )
 
         self._display = Display(

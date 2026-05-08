@@ -11,7 +11,6 @@ import asyncio
 import base64
 from dataclasses import dataclass
 from io import BytesIO
-from textwrap import dedent
 from typing import Any
 
 from PIL import Image
@@ -19,26 +18,9 @@ import httpx
 import numpy as np
 
 from docugym.narration_defaults import DEFAULT_NARRATION_TEXT
+from docugym.prompts import DEFAULT_SYSTEM_PROMPT, get_system_prompt
 
-SYSTEM_PROMPT = dedent(
-    """
-        You are a calm, wonder-filled nature-documentary narrator in the tradition of
-        BBC wildlife programmes. You are watching a game on screen and narrating it as
-        if it were a rare scene from the natural world. Observe the creature (or vessel,
-        vehicle, or figure) on screen with the same reverence you would give a pangolin
-        or a lyrebird.
-
-        Rules:
-        - 1 to 2 sentences, present tense, British phrasing.
-        - Hushed, measured, slightly awed. Short clauses. No exclamation marks.
-        - Use biology / ecology metaphors where natural: instinct, territory,
-            courtship, peril, lineage, survival, the edge of exhaustion.
-        - Do not name the game. Do not mention pixels, screens, scores, or controllers.
-        - Do not name real people. You are a narrator, not the narrator.
-        - If nothing has changed, say so gently (e.g., "A pause. The creature gathers
-            itself.").
-        """
-).strip()
+SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
 
 
 @dataclass(slots=True)
@@ -84,6 +66,7 @@ class VLMNarrator:
         image_detail: str = "low",
         timeout_seconds: float = 30.0,
         readiness_timeout_seconds: float = 5.0,
+        system_prompt: str | None = None,
     ) -> None:
         """Initialize narrator transport and sampling parameters.
 
@@ -96,9 +79,12 @@ class VLMNarrator:
             image_detail: Image detail hint passed to the multimodal endpoint.
             timeout_seconds: Request timeout for narration calls.
             readiness_timeout_seconds: Timeout for readiness polling requests.
+            system_prompt: Optional per-instance system prompt. When omitted,
+                the process-wide prompt from ``docugym.prompts`` is used.
 
         Raises:
-            ValueError: If ``base_url`` is not an absolute http(s) URL.
+            ValueError: If ``base_url`` is not an absolute http(s) URL or
+                ``system_prompt`` is blank.
         """
 
         parsed_base_url = httpx.URL(base_url)
@@ -113,6 +99,7 @@ class VLMNarrator:
         self._image_detail = image_detail
         self._timeout_seconds = timeout_seconds
         self._readiness_timeout_seconds = readiness_timeout_seconds
+        self._system_prompt = self._normalize_system_prompt(system_prompt)
         self._client: httpx.AsyncClient | None = None
         self._client_loop: asyncio.AbstractEventLoop | None = None
 
@@ -139,7 +126,7 @@ class VLMNarrator:
         payload = {
             "model": self._model,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self._effective_system_prompt()},
                 {
                     "role": "user",
                     "content": [
@@ -185,7 +172,7 @@ class VLMNarrator:
             payload = {
                 "model": self._model,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": self._effective_system_prompt()},
                     {
                         "role": "user",
                         "content": [
@@ -302,6 +289,19 @@ class VLMNarrator:
             "wait_until_ready_sync cannot be used from a running event loop; "
             "await wait_until_ready instead."
         )
+
+    @staticmethod
+    def _normalize_system_prompt(system_prompt: str | None) -> str | None:
+        if system_prompt is None:
+            return None
+
+        normalized = system_prompt.strip()
+        if not normalized:
+            raise ValueError("system_prompt must not be empty")
+        return normalized
+
+    def _effective_system_prompt(self) -> str:
+        return self._system_prompt or get_system_prompt()
 
     @staticmethod
     def _build_user_message(context: NarrationContext) -> str:
