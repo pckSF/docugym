@@ -2,9 +2,9 @@
 type: reference
 tags: [security, audit, risk, supply-chain]
 created: 2026-04-20
-updated: 2026-05-07
+updated: 2026-05-08
 status: active
-related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md, betterleaks-secret-scanning-evaluation-and-tuning.md, audit-container-cli-hardening-evaluation.md, stage-5-local-tts-streaming-audio.md, 2026-05-07-application-security-audit.md]
+related: [networking-ports-and-services.md, devcontainer-security-settings-review.md, github-actions-immutable-pinning.md, hashed-requirements-export-from-uv-lock.md, github-actions-hardening-measures-review.md, betterleaks-secret-scanning-evaluation-and-tuning.md, audit-container-cli-hardening-evaluation.md, stage-5-local-tts-streaming-audio.md, 2026-05-07-application-security-audit.md, 2026-05-08-application-security-audit.md, ci-scheduled-pip-audit-job.md, sb3-untrusted-repo-cli-confirmation.md, readonly-compose-profile-for-runp.md, security-audit-remediation-hub.md]
 ---
 
 # Security Audit and Risk Register
@@ -26,21 +26,28 @@ networking assumptions change.
 
 ### Delta review (since last audit update)
 
-- Baseline used: the 2026-05-07 application security audit in
-  [2026-05-07-application-security-audit.md](2026-05-07-application-security-audit.md).
+- Baseline used: the 2026-05-08 follow-up audit in
+  [2026-05-08-application-security-audit.md](2026-05-08-application-security-audit.md).
 - Scope reviewed: `docugym/config.py`, `docugym/env.py`, `docugym/runtime.py`,
   `docugym/tune.py`, `docugym/cli.py`, `configs/*.yaml`,
   `docker-compose.yaml`, `scripts/serve_vlm.sh`, `pyproject.toml`, `uv.lock`,
   `requirements.txt`, README/spec docs, and focused tests.
 - Verification performed:
   - `uv run ruff check .` passed.
-  - `uv run pytest -q` passed: 81 tests, 1 existing pygame/pkg_resources warning.
+  - `uv run pytest -q` passed: 95 tests, 1 existing pygame/pkg_resources warning.
   - `uv export --format requirements.txt --all-extras --group dev --no-emit-project --locked --output-file requirements.txt` completed.
   - A fresh temp export matched `requirements.txt` except for uv's generated
     output-path header; dependency bodies were byte-for-byte identical.
   - `DOCUGYM_VLM_HOST=0.0.0.0 ./scripts/serve_vlm.sh` refused to start unless
     the explicit public-bind acknowledgment is present.
 - Security-profile changes observed:
+  - CLI now requires explicit `--allow-untrusted-repo` opt-in (plus
+    confirmation or `--yes`) for warning-only SB3 deserialization paths, and
+    blocks untrusted custom repos without revision pins.
+  - New `runp-ro` compose service/profile provides a read-only source-mount
+    runtime path for non-edit workflows.
+  - New `.github/workflows/pip-audit.yml` adds dependency CVE scanning on
+    dependency-file PR/push changes plus weekly schedule.
   - SB3 trusted-repo enforcement now fails closed by default.
   - Shipped SB3 presets now pin Hugging Face model downloads to commit SHAs.
   - SB3 policy download now uses `huggingface_hub.hf_hub_download` with an
@@ -62,22 +69,13 @@ networking assumptions change.
 
 ### Medium-priority findings
 
-- Residual SB3 deserialization risk remains only when trusted-repo enforcement
-  is explicitly disabled or a custom repo/policy is loaded without an appropriate
-  revision pin.
-  - Location: `docugym/env.py`, `docugym/cli.py`, and config-controlled
-    `agent.enforce_trusted_repo` / `agent.sb3_revision`.
-  - Why it matters: defaults now fail closed and shipped presets are pinned, but
-    users can still choose permissive mode or mutable third-party artifacts.
-  - Potential malware source: third-party or attacker-controlled model repository.
-  - Confidence: `likely`.
-
 - Writable source bind mount (`.:/app`) still allows repository modification from inside
-  the dev container even after added privilege barriers.
+  the container for editable services even after added privilege barriers.
   - Location: `docker-compose.yaml` (`dev` and `runp` services).
   - Why it matters: `no-new-privileges:true` and `cap_drop: ALL` reduce kernel
     privilege expansion, but malicious code that already runs in-container can
-    still alter host-side repository files through the bind mount.
+    still alter host-side repository files through writable bind mounts.
+    The new `runp-ro` service bounds this residual for non-edit workflows.
   - Potential malware source: compromised dependency, malicious downloaded artifact,
     or unsafe developer command in container session.
   - Confidence: `confident`.
@@ -93,6 +91,17 @@ networking assumptions change.
   - Confidence: `likely`.
 
 ### Low-priority findings
+
+- Residual SB3 deserialization risk remains only when trusted-repo enforcement
+  is explicitly bypassed via CLI opt-in (`--allow-untrusted-repo`), including
+  non-interactive `--yes` usage.
+  - Location: `docugym/env.py`, `docugym/cli.py`, and config-controlled
+    `agent.enforce_trusted_repo` / `agent.sb3_revision`.
+  - Why it matters: defaults now fail closed, custom untrusted repos require
+    revision pins, and CLI prompts force explicit acknowledgement, but operators
+    can still deliberately opt into deserialization risk for advanced workflows.
+  - Potential malware source: third-party or attacker-controlled model repository.
+  - Confidence: `likely`.
 
 - `uvx` bootstrap for `ty` in pre-commit executes an externally fetched tool.
   - Location: `.pre-commit-config.yaml` (`uvx ty==0.0.32 check`).
@@ -113,7 +122,7 @@ networking assumptions change.
 ### Positive controls already present
 
 - No host ports are currently published in `docker-compose.yaml` for `dev`/`runp`.
-- Default runtime uses non-root user (`devuser`) in container stages.
+- Default runtime uses non-root user (`devuser`) in container images.
 - CI workflow actions in `.github/workflows/ci.yml` are pinned to full commit
   SHAs with same-line version comments.
 - CI workflow uses explicit least-privilege token scope (`permissions:
@@ -129,6 +138,8 @@ networking assumptions change.
   hash-pinning false positives while retaining default detectors.
 - Dedicated `.github/workflows/zizmor.yml` runs zizmor in CI for GitHub Actions
   security scanning with SARIF upload.
+- Dedicated `.github/workflows/pip-audit.yml` runs dependency CVE scanning in
+  CI on dependency-file PR/push changes and weekly schedule.
 - Dependabot version update automation is configured with cooldown policy in
   `.github/dependabot.yml` for `github-actions` and `uv` ecosystems.
 - `requirements.txt` is exported from `uv.lock` with pinned versions and
@@ -145,6 +156,9 @@ networking assumptions change.
 - SB3 policy loading now has fail-closed trusted-repo controls by default,
   explicit trust-risk warnings, shipped commit SHA revision pins, and
   revision-aware cache paths for downloaded policy artifacts.
+- CLI now requires explicit untrusted-repo opt-in and confirmation for
+  warning-only SB3 deserialization paths, and requires revision pins for
+  custom non-allowlisted repos.
 - `scripts/serve_vlm.sh` now binds to `127.0.0.1` by default, reducing
   accidental network exposure of the local VLM endpoint.
 - `scripts/serve_vlm.sh` now refuses non-loopback binds unless
@@ -152,6 +166,8 @@ networking assumptions change.
 - `dev` and `runp` compose services now drop Linux capabilities and set
   `no-new-privileges:true`; their writable source bind mount remains a tracked
   residual risk.
+- `runp-ro` compose service/profile adds a read-only runtime path with
+  read-only source mount and tmpfs-backed writable runtime directories.
 - A dedicated `audit` service runs dependency vulnerability checks in a more
   restricted container context (`read_only`, `tmpfs`, `no-new-privileges`,
   `cap_drop: ALL`, and read-only source mount).
@@ -198,6 +214,19 @@ networking assumptions change.
   verified via `docker pull cgr.dev/chainguard/python:latest`.
 - 2026-05-07: Updated after adding SB3 trusted-repo controls, localhost-default
   VLM sidecar binding, and CI lock-export drift guard for `requirements.txt`.
+- 2026-05-08: Verified all 2026-05-07 remediations in place; recorded
+  follow-up audit in [2026-05-08-application-security-audit.md](2026-05-08-application-security-audit.md);
+  added Low finding for missing scheduled `pip-audit` CI job; linked three
+  open_task cdocs ([ci-scheduled-pip-audit-job.md](ci-scheduled-pip-audit-job.md),
+  [sb3-untrusted-repo-cli-confirmation.md](sb3-untrusted-repo-cli-confirmation.md),
+  [readonly-compose-profile-for-runp.md](readonly-compose-profile-for-runp.md)).
+- 2026-05-08: Updated after closing the three 2026-05-08 open security tasks:
+  added CLI untrusted SB3 confirmation/revision gate, introduced `runp-ro`
+  readonly compose profile, and enabled automated `pip-audit` workflow with
+  dependency-change and weekly schedule triggers.
+- 2026-05-08: Rebalanced severities after remediation closure; moved the
+  explicit-operator SB3 opt-in path from Medium to Low while keeping writable
+  bind-mount tampering risk as Medium for editable services.
 - 2026-05-07: Updated after remediating the application security audit findings:
   fail-closed SB3 trust defaults, HF revision pins, optional extras in hashed
   export, dev/runp capability drops, and VLM public-bind acknowledgment gate.
@@ -215,7 +244,7 @@ networking assumptions change.
   debug/perf workflows requiring weaker isolation.
 - [x] Strengthen optional runtime dependency controls by declaring voice/VLM
   extras and including them in the lock-derived hash export.
-- [ ] Add automated `pip-audit` or equivalent in CI if dependency vulnerability
+- [x] Add automated `pip-audit` or equivalent in CI if dependency vulnerability
   scanning should move from the dedicated compose audit path into GitHub Actions.
 - [x] Constrain VLM sidecar bind interface by default (for example,
   `--host 127.0.0.1`) and require explicit opt-in for broader exposure.

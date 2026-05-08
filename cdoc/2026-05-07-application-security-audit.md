@@ -2,9 +2,9 @@
 type: log
 tags: [security, audit, owasp, supply-chain, deserialization, sb3]
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-08
 status: active
-related: [security-audit-and-risk-register.md, hashed-requirements-export-from-uv-lock.md, networking-ports-and-services.md, audit-container-cli-hardening-evaluation.md, devcontainer-security-settings-review.md, stage-5-local-tts-streaming-audio.md]
+related: [security-audit-and-risk-register.md, hashed-requirements-export-from-uv-lock.md, networking-ports-and-services.md, audit-container-cli-hardening-evaluation.md, devcontainer-security-settings-review.md, stage-5-local-tts-streaming-audio.md, 2026-05-08-application-security-audit.md]
 ---
 # Security Audit: docugym Application & Build Surface (2026-05-07)
 
