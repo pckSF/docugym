@@ -29,6 +29,15 @@ in dependency order and cross-linked for future audits:
   Added automated dependency CVE scanning in GitHub Actions using
   dependency-change triggers and a weekly schedule for disclosure-lag coverage.
 
+### Status Clarification
+
+The three child notes above are `open_task` records with `status: archived`
+because those implementation tasks are complete. Their resulting mitigations
+remain active controls and continue to be tracked in
+[security-audit-and-risk-register.md](security-audit-and-risk-register.md).
+
 ## Changelog
 
 - 2026-05-08: Created hub note and linked all remediation subtasks.
+- 2026-05-08: Clarified that archived task notes represent completed work while
+  their implemented mitigations remain active in the rolling risk register.

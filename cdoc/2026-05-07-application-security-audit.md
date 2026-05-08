@@ -82,7 +82,7 @@ The remediation closes the default SB3 deserialization exposure, makes shipped m
 
 ### 1. SB3 policy deserialization runs arbitrary code; trusted-repo enforcement is off by default
 
-- **Location:** [docugym/env.py](docugym/env.py#L165-L189), [docugym/config.py](docugym/config.py#L29-L37) | **Severity:** High | **Confidence:** High
+- **Location:** [docugym/env.py](../docugym/env.py#L165-L189), [docugym/config.py](../docugym/config.py#L29-L37) | **Severity:** High | **Confidence:** High
 - **Exploitability:** Medium | **CWE:** CWE-502 | **OWASP 2025:** A08
 
 `load_sb3_policy` warns but does not block untrusted repo ids when `enforce_trusted_repo` is false, then calls `loader.load(str(model_path), device=device)` which under the hood unzips and `pickle`-loads the policy artifact:
@@ -101,17 +101,17 @@ if not _is_trusted_repo(repo_id, trusted_prefixes):
 return loader.load(str(model_path), device=device)
 ```
 
-The shipped default in [configs/default.yaml](configs/default.yaml#L11-L16) and [docugym/config.py](docugym/config.py#L29-L37) is `enforce_trusted_repo: false`. The CLI accepts `--repo-id` and `--policy` directly ([docugym/cli.py](docugym/cli.py#L495-L520)) and the `policy` shorthand sets `effective_repo_id = policy` verbatim, so a typo-squat such as `sb3-models/ppo-...` or `sb3X/...` flows straight through.
+The shipped default in [configs/default.yaml](../configs/default.yaml#L11-L16) and [docugym/config.py](../docugym/config.py#L29-L37) is `enforce_trusted_repo: false`. The CLI accepts `--repo-id` and `--policy` directly ([docugym/cli.py](../docugym/cli.py#L495-L520)) and the `policy` shorthand sets `effective_repo_id = policy` verbatim, so a typo-squat such as `sb3-models/ppo-...` or `sb3X/...` flows straight through.
 
 **Attack path:** attacker publishes a HF repo with a name resembling a real SB3 reference checkpoint (or compromises a non-allowlisted repo the operator already uses) → operator runs `docugym run --policy attacker/ppo-Pong` (or has it set in their YAML) → `huggingface_sb3.load_from_hub` downloads a malicious `.zip` → `PPO.load` deserializes the embedded `pytorch.pth` / pickle blob → arbitrary code executes as the operator's user, with full access to the home directory, SSH keys, and the writable bind mount into the repo.
 **Impact:** full local RCE in user context; persistence via `~/.bashrc`, `~/.ssh/`, or via the writable repo bind mount inside a running dev container.
-**Remediation:** change the default to `enforce_trusted_repo: true` in [docugym/config.py](docugym/config.py#L36) and [configs/default.yaml](configs/default.yaml#L15), so the allowlist fails closed; require an explicit `--allow-untrusted-repo` flag (or `enforce_trusted_repo: false` override) for the warning-only path; add a CLI `typer.confirm()` prompt before loading any non-allowlisted repo even in opt-out mode. The accompanying `revision`-pin remediation in finding 2 should be applied at the same time.
+**Remediation:** change the default to `enforce_trusted_repo: true` in [docugym/config.py](../docugym/config.py#L36) and [configs/default.yaml](../configs/default.yaml#L15), so the allowlist fails closed; require an explicit `--allow-untrusted-repo` flag (or `enforce_trusted_repo: false` override) for the warning-only path; add a CLI `typer.confirm()` prompt before loading any non-allowlisted repo even in opt-out mode. The accompanying `revision`-pin remediation in finding 2 should be applied at the same time.
 
 ## Medium Findings
 
 ### 2. Hugging Face model downloads are not pinned to a commit revision
 
-- **Location:** [docugym/env.py](docugym/env.py#L97-L113) | **Severity:** Medium | **Confidence:** High
+- **Location:** [docugym/env.py](../docugym/env.py#L97-L113) | **Severity:** Medium | **Confidence:** High
 - **Exploitability:** Low | **CWE:** CWE-494 | **OWASP 2025:** A08
 
 `_download_policy` calls `load_from_hub(repo_id=repo_id, filename=filename)` with no `revision=` argument, so it always resolves to the current `main`/`HEAD` of the repo:
@@ -129,7 +129,7 @@ Even allowlisted `sb3/...` repos can be compromised at the maintainer-account le
 
 ### 3. Voice/inference runtime dependencies are unpinned and outside the hashed lockfile
 
-- **Location:** [pyproject.toml](pyproject.toml#L9-L26), [docugym/tts.py](docugym/tts.py#L82-L95), [docugym/audio.py](docugym/audio.py#L60-L70) | **Severity:** Medium | **Confidence:** High
+- **Location:** [pyproject.toml](../pyproject.toml#L9-L26), [docugym/tts.py](../docugym/tts.py#L82-L95), [docugym/audio.py](../docugym/audio.py#L60-L70) | **Severity:** Medium | **Confidence:** High
 - **Exploitability:** Medium | **CWE:** CWE-1357 | **OWASP 2025:** A03
 
 `docugym/tts.py` does `importlib.import_module("kokoro")` and `docugym/audio.py` does `importlib.import_module("sounddevice")`, but neither `kokoro` nor `sounddevice` (nor `vllm` for the sidecar) appear in `pyproject.toml` `dependencies` or in the hash-pinned `requirements.txt`:
@@ -141,14 +141,14 @@ KPipeline = getattr(kokoro_module, "KPipeline")
 sd = importlib.import_module("sounddevice")
 ```
 
-Operators following the README (or [specification.md](specification.md#L138-L148)) are instructed to `uv pip install kokoro soundfile sounddevice` ad-hoc, which bypasses the lockfile and `--require-hashes` audit container. `kokoro` on PyPI is a third-party-published name, easily typo-squatted (`kokoro-tts`, `kokoros`, etc.).
+Operators following the README (or [specification.md](../specification.md#L138-L148)) are instructed to `uv pip install kokoro soundfile sounddevice` ad-hoc, which bypasses the lockfile and `--require-hashes` audit container. `kokoro` on PyPI is a third-party-published name, easily typo-squatted (`kokoro-tts`, `kokoros`, etc.).
 **Attack path:** operator copies the README install command → resolver fetches whichever `kokoro` is currently on PyPI without hash verification → a future-compromised release executes its `setup.py`/`__init__.py` in the venv → import-time code runs as the operator.
 **Impact:** install-time and import-time RCE on any host that follows the documented optional-feature install path; the hardened `audit` Compose service does not see these packages.
 **Remediation:** add `kokoro`, `sounddevice`, and `soundfile` to `pyproject.toml` as optional groups (e.g. `[project.optional-dependencies] voice = [...]`) with version bounds, regenerate `requirements.txt` via `uv export` so they receive `--hash=` lines, and document `uv sync --extra voice` (or `pip install -r requirements.txt`) instead of unconstrained ad-hoc installs.
 
 ### 4. Writable host bind mount on `dev` and `runp` Compose services
 
-- **Location:** [docker-compose.yaml](docker-compose.yaml#L13-L17), [docker-compose.yaml](docker-compose.yaml#L31-L35) | **Severity:** Medium | **Confidence:** High
+- **Location:** [docker-compose.yaml](../docker-compose.yaml#L13-L17), [docker-compose.yaml](../docker-compose.yaml#L31-L35) | **Severity:** Medium | **Confidence:** High
 - **Exploitability:** Medium | **CWE:** CWE-732 | **OWASP 2025:** A02
 
 Both `dev` and `runp` mount the repository writable into the container with no `:ro`, no `read_only:` filesystem, no `cap_drop`, and no `security_opt: no-new-privileges`:
@@ -168,7 +168,7 @@ Compare to the hardened `audit` service which uses `:ro`, `read_only: true`, `ca
 
 ### 5. VLM sidecar bind interface is overridable to a public address via a single env var
 
-- **Location:** [scripts/serve_vlm.sh](scripts/serve_vlm.sh#L1-L17) | **Severity:** Low | **Confidence:** High
+- **Location:** [scripts/serve_vlm.sh](../scripts/serve_vlm.sh#L1-L17) | **Severity:** Low | **Confidence:** High
 - **Exploitability:** Low | **CWE:** CWE-668 | **OWASP 2025:** A02
 
 The script defaults to `127.0.0.1` (good), but `DOCUGYM_VLM_HOST=0.0.0.0` flips it without any further confirmation:
@@ -187,13 +187,13 @@ vLLM has no auth, so any LAN peer that finds the open port gets free GPU inferen
 
 ### 6. `subprocess` usage in recorder is safe — argv list, no shell, binary resolved via `shutil.which`
 
-- **Location:** [docugym/recording.py](docugym/recording.py#L41-L46), [docugym/recording.py](docugym/recording.py#L173-L178), [docugym/recording.py](docugym/recording.py#L211-L243) | **Severity:** Informational | **Confidence:** High
+- **Location:** [docugym/recording.py](../docugym/recording.py#L41-L46), [docugym/recording.py](../docugym/recording.py#L173-L178), [docugym/recording.py](../docugym/recording.py#L211-L243) | **Severity:** Informational | **Confidence:** High
 
 `FFmpegSessionRecorder.__init__` resolves the binary with `shutil.which(ffmpeg_binary)` and refuses to start if it is missing; both the encode (`subprocess.Popen`) and mux (`subprocess.run`) calls pass argv lists with `shell=False` (the default) and no user-controlled string is interpolated into a shell. The only operator-controlled value reaching the argv is `out_path`, which is a `pathlib.Path` from CLI/config and does not parse as flag injection because it is passed as a positional argument after explicit `-i`/`-c` switches. No remediation needed.
 
 ### 7. CI, dependency, and YAML-loading hygiene
 
-- **Locations:** [.github/workflows/ci.yml](.github/workflows/ci.yml#L7-L40), [requirements.txt](requirements.txt), [docugym/cli.py](docugym/cli.py#L101-L106) | **Severity:** Informational | **Confidence:** High
+- **Locations:** [.github/workflows/ci.yml](../.github/workflows/ci.yml#L7-L40), [requirements.txt](../requirements.txt), [docugym/cli.py](../docugym/cli.py#L101-L106) | **Severity:** Informational | **Confidence:** High
 
 `actions/checkout`, `actions/setup-python`, and `astral-sh/setup-uv` are pinned to full commit SHAs with same-line version comments; the workflow declares `permissions: contents: read` and `persist-credentials: false`; `requirements.txt` is exported with `--hash` lines from `uv.lock` and CI fails the build on drift. YAML config files are parsed with `yaml.safe_load`, never `yaml.load`. JSON CLI input (`_parse_env_kwargs`) uses `json.loads` and validates the result is a `dict`. No remediation needed.
 
@@ -222,3 +222,4 @@ Searched the working tree (source, tests, fixtures, configs, CI) for `api_key`, 
 
 - 2026-05-07: Created. Application+build security audit covering OWASP 2025 sweep and Phase 4 secrets sweep; cross-references existing rolling register.
 - 2026-05-07: Added remediation decision record, status table, residual-risk rationale, and verification results after patching feasible findings.
+- 2026-05-08: Normalized repository file links to `../...` paths so all cdoc markdown references resolve correctly from within `cdoc/`.

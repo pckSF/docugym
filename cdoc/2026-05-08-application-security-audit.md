@@ -11,8 +11,9 @@ related: [security-audit-and-risk-register.md, 2026-05-07-application-security-a
 ## Context
 
 Follow-up application security audit run after the 2026-05-07 remediation
-batch was merged. The full report is at the workspace root in
-[security_audit.md](../security_audit.md); this log captures the verification
+batch was merged. The baseline full report is recorded in
+[2026-05-07-application-security-audit.md](2026-05-07-application-security-audit.md);
+this log captures the verification
 result, net-new findings, and the derived task list. Date is 2026-05-08.
 
 ## Content
@@ -103,3 +104,4 @@ Follow-up resolution is recorded in
 - 2026-05-08: Created. Verified 2026-05-07 remediations in place; recorded
   2 Medium / 1 Low / 3 Informational; opened three derived task cdocs.
 - 2026-05-08: Linked completed remediation follow-up hub note.
+- 2026-05-08: Replaced stale missing root report link with the in-repo baseline audit log reference.

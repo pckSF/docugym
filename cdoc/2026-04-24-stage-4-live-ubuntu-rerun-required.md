@@ -2,7 +2,7 @@
 type: decision
 tags: [stage-4, testing, ubuntu, validation, wsl, container]
 created: 2026-04-24
-updated: 2026-04-24
+updated: 2026-05-08
 status: active
 related: [stage-4-vlm-narration-sync.md, 2026-04-24-stage-3-real-ubuntu-display-results.md, 2026-04-24-stage-3-display-follow-up-validation-and-text-bands.md]
 ---
@@ -79,6 +79,13 @@ container path) before final acceptance is treated as complete. Container and
 CI checks remain required but not sufficient on their own for this user-facing
 runtime milestone.
 
+## Current Status (2026-05-08)
+
+- This decision remains active and unresolved in cdoc.
+- A native Ubuntu Stage 4 rerun signoff log has not been recorded yet.
+- Until that follow-up entry exists, treat Stage 4 host-level validation as an
+  open acceptance gate rather than implicitly complete.
+
 ## Pre-Mortem
 
 - Native rerun is skipped due schedule pressure, and host-specific regressions
@@ -95,3 +102,5 @@ runtime milestone.
 
 - 2026-04-24: Created decision note requiring native Ubuntu rerun for Stage 4
   signoff instead of relying solely on WSL/container execution evidence.
+- 2026-05-08: Added explicit current-status checkpoint marking the native
+  Ubuntu rerun signoff as still open in cdoc.
