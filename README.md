@@ -32,6 +32,7 @@ perfect excuse to finally try the experiment.
 - [Runtime Shortcuts](#runtime-shortcuts)
 - [Recording](#recording)
 - [Troubleshooting](#troubleshooting)
+- [Container Profiles](#container-profiles)
 - [Development Workflow](#development-workflow)
 - [Reference Docs](#reference-docs)
 - [Documentation Quality Standard](#documentation-quality-standard)
@@ -124,6 +125,18 @@ docugym run \
 	--env ALE/Pong-v5 \
 	--policy sb3/ppo-PongNoFrameskip-v4 \
 	--wait-for-vlm
+```
+
+For non-allowlisted SB3 repositories, pin a revision and explicitly opt in to
+untrusted policy loading:
+
+```bash
+docugym run \
+	--repo-id <owner>/<policy-repo> \
+	--filename <policy-file>.zip \
+	--revision <commit-sha> \
+	--allow-untrusted-repo \
+	--yes
 ```
 
 5. Record to MP4:
@@ -286,8 +299,32 @@ Model guidance:
 	this is usually model prefill cost; warm up sidecar before long sessions.
 - SB3 checkpoint mismatch:
 	checkpoint env ids are often version-specific (`*NoFrameskip-v4`, `v2`, and so on).
+- Untrusted SB3 policy loading blocked:
+	for custom repos, pass `--revision <commit-sha>` and `--allow-untrusted-repo`
+	(plus `--yes` for non-interactive runs).
 - Recording fails immediately:
 	verify `ffmpeg` is installed and available in `PATH`.
+
+## Container Profiles
+
+Compose services provide both editable and hardened run paths:
+
+- `dev`: writable bind mount (`.:/app`) for active editing.
+- `runp`: writable bind mount for fast local iteration.
+- `runp-ro` (profile `readonly`): read-only bind mount, `read_only: true`, and
+  tmpfs-backed runtime cache/output paths for non-edit execution.
+
+Example hardened runtime invocation:
+
+```bash
+docker compose --profile readonly run --rm runp-ro docugym run --config atari --wait-for-vlm
+```
+
+Dependency vulnerability scanning is available both locally and in CI:
+
+- Local repro: `docker compose run --rm audit`
+- CI workflow: `.github/workflows/pip-audit.yml` (dependency-file PR/push changes
+  plus a weekly scheduled scan)
 
 ## Development Workflow
 
@@ -300,6 +337,10 @@ uv run pytest -q
 ```
 
 Pre-commit also runs doc-quality, lint, formatting, type checks, and tests.
+
+GitHub Actions also runs dependency CVE scanning in
+`.github/workflows/pip-audit.yml`; the weekly schedule catches newly disclosed
+advisories even when dependency files do not change.
 
 ## Reference Docs
 

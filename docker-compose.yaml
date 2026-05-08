@@ -55,6 +55,41 @@ services:
               count: all
               capabilities: [gpu]
 
+  runp-ro:
+    profiles: [readonly]
+    build:
+      context: .
+      target: run
+      args:
+        USER_ID: ${UID:-1000}
+        GROUP_ID: ${GID:-1000}
+    image: docugym-run:latest
+    container_name: docugym-run-ro
+    hostname: docugym-run-ro
+    environment:
+      UV_PROJECT_ENVIRONMENT: /home/devuser/.venv
+      PYTHONDONTWRITEBYTECODE: "1"
+    shm_size: "2gb"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - .:/app:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/devuser/.cache
+      - /app/out
+    working_dir: /app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
   audit:
     build:
       context: .
