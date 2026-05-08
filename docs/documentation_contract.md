@@ -68,4 +68,23 @@ README should cover, in order:
 
 - Doc quality checks run through `scripts/check_doc_quality.py`.
 - Initial enforcement focuses on modules, classes, and public callables.
-- Strict enforcement can be enabled incrementally as backlog items are closed.
+
+### Documentation Levels
+
+The checker classifies each audited symbol into one of four levels:
+
+- `bare`: no docstring.
+- `minimal`: docstring present but shallow or structurally incomplete.
+- `standard`: complete and contract-compliant documentation.
+- `rich`: complete documentation plus additional context (for example Notes or
+  Examples).
+
+Default thresholds:
+
+- Core modules (`docugym/`): minimum level `standard`.
+- Test modules (`tests/`): minimum level `minimal`.
+
+Use checker flags to tune policy for a rollout or stricter CI profile:
+
+- `--min-level-core`
+- `--min-level-tests`
