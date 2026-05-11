@@ -2,9 +2,9 @@
 type: decision
 tags: [code-review, remediation, performance, runtime, recording, narrator, wrapper]
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-11
 status: active
-related: [2026-05-07-code-review-idiomatic-and-performance-issues.md, 2026-05-07-docstring-standardization-pass.md]
+related: [2026-05-07-code-review-idiomatic-and-performance-issues.md, 2026-05-07-docstring-standardization-pass.md, 2026-05-11-source-bloat-remediation-pass.md]
 ---
 # Code Review Remediation Scope
 
@@ -178,3 +178,5 @@ The following audit items remain intentionally open:
   explicit deferrals after pre-commit validation passed.
 - 2026-05-07: Linked the docstring-standardization log note for documentation
   quality follow-up traceability.
+- 2026-05-11: Linked the follow-up source-bloat remediation pass that closed
+  additional local duplication and hot-path findings from a newer report.

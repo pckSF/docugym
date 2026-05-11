@@ -2,9 +2,9 @@
 type: note
 tags: [code-review, performance, idiomatic, audit, runtime, wrapper, display, narrator, recording]
 created: 2026-05-07
-updated: 2026-05-07
+updated: 2026-05-11
 status: active
-related: [stage-6-async-orchestration-and-keyframe-selection.md, stage-3-display-layer.md, stage-4-vlm-narration-sync.md, stage-5-local-tts-streaming-audio.md, stage-9-mp4-recording.md, wrapper-mode-gym-api-integration.md, final-setup-runtime-and-naming-consolidation.md, 2026-05-07-code-review-remediation-scope.md]
+related: [stage-6-async-orchestration-and-keyframe-selection.md, stage-3-display-layer.md, stage-4-vlm-narration-sync.md, stage-5-local-tts-streaming-audio.md, stage-9-mp4-recording.md, wrapper-mode-gym-api-integration.md, final-setup-runtime-and-naming-consolidation.md, 2026-05-07-code-review-remediation-scope.md, 2026-05-11-source-bloat-remediation-pass.md]
 ---
 # Code Review — Idiomatic Issues, Best-Practice Gaps, and Performance Losses
 
@@ -203,3 +203,5 @@ Each accepted item should land as its own short `decision` note (lightweight ADR
 - 2026-05-07: Created. Initial 63-finding inventory across 20 modules.
 - 2026-05-07: Linked remediation-scope decision for accepted first-pass fixes
 	and documented deferrals.
+- 2026-05-11: Linked follow-up source-bloat remediation pass for additional
+  local duplication, sync-helper, and display hot-path fixes.
