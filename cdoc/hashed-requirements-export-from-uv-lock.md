@@ -2,9 +2,9 @@
 type: decision
 tags: [security, supply-chain, dependencies, uv, docker]
 created: 2026-04-22
-updated: 2026-05-07
+updated: 2026-05-11
 status: active
-related: [security-audit-and-risk-register.md, 2026-05-07-application-security-audit.md]
+related: [security-audit-and-risk-register.md, 2026-05-07-application-security-audit.md, pip-audit-github-actions-failure-remediation.md]
 ---
 
 # Hashed Requirements Export From uv.lock
@@ -133,3 +133,8 @@ optional supply-chain surface.
   lock-derived export with `--no-emit-project`.
 - 2026-05-07: Updated export semantics to include `--all-extras` after adding
   voice/VLM optional dependencies to the locked and hash-pinned artifact.
+- 2026-05-11: Linked follow-up remediation note after a live pip-audit CI
+  failure, including lock/export refresh with patched `pillow` and `pytest`
+  versions.
+- 2026-05-11: Consolidated strict fail-closed policy follow-up into the
+  canonical pip-audit remediation decision note.

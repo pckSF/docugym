@@ -2,9 +2,9 @@
 type: open_task
 tags: [security, ci, supply-chain, dependencies, pip-audit]
 created: 2026-05-08
-updated: 2026-05-08
+updated: 2026-05-11
 status: archived
-related: [2026-05-08-application-security-audit.md, security-audit-and-risk-register.md, hashed-requirements-export-from-uv-lock.md, github-actions-immutable-pinning.md, security-audit-remediation-hub.md]
+related: [2026-05-08-application-security-audit.md, security-audit-and-risk-register.md, hashed-requirements-export-from-uv-lock.md, github-actions-immutable-pinning.md, security-audit-remediation-hub.md, pip-audit-github-actions-failure-remediation.md]
 ---
 # Add Scheduled `pip-audit` CI Job for Hash-Pinned Requirements
 
@@ -77,3 +77,8 @@ Implemented `.github/workflows/pip-audit.yml` with:
 - 2026-05-08: Created.
 - 2026-05-08: Archived as completed after adding hybrid-trigger pip-audit
   workflow in GitHub Actions.
+- 2026-05-11: Linked follow-up remediation note for actionable dependency
+  upgrades and narrow ignore-ID handling when the audit workflow failed on live
+  advisories.
+- 2026-05-11: Consolidated strict fail-closed follow-up into the canonical
+  pip-audit remediation decision note.
