@@ -110,7 +110,7 @@ def test_make_env_registers_ale_envs_and_seeds(monkeypatch) -> None:
     }
     assert register_calls == [ale_module]
     assert env.action_space.seed_value == 123
-    assert env.reset_calls == [123]
+    assert env.reset_calls == []
 
 
 def test_make_env_non_ale_does_not_register(monkeypatch) -> None:

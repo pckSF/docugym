@@ -19,6 +19,7 @@ import numpy as np
 
 from docugym.narration_defaults import DEFAULT_NARRATION_TEXT
 from docugym.prompts import DEFAULT_SYSTEM_PROMPT, get_system_prompt
+from docugym.async_utils import run_async_from_sync
 
 SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT
 
@@ -123,25 +124,7 @@ class VLMNarrator:
         """
 
         image_payload = await asyncio.to_thread(self._encode_image_payload, frame)
-        payload = {
-            "model": self._model,
-            "messages": [
-                {"role": "system", "content": self._effective_system_prompt()},
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": self._build_user_message(context),
-                        },
-                        image_payload,
-                    ],
-                },
-            ],
-            "max_tokens": self._max_tokens,
-            "temperature": self._temperature,
-            "top_p": self._top_p,
-        }
+        payload = self._build_payload(image_payload=image_payload, context=context)
 
         client = await self._get_client()
         body = await self._post_chat_completion(client, payload)
@@ -168,40 +151,20 @@ class VLMNarrator:
         """
 
         async def _run_once() -> str:
-            image_payload = await asyncio.to_thread(self._encode_image_payload, frame)
-            payload = {
-                "model": self._model,
-                "messages": [
-                    {"role": "system", "content": self._effective_system_prompt()},
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": self._build_user_message(context),
-                            },
-                            image_payload,
-                        ],
-                    },
-                ],
-                "max_tokens": self._max_tokens,
-                "temperature": self._temperature,
-                "top_p": self._top_p,
-            }
+            image_payload = self._encode_image_payload(frame)
+            payload = self._build_payload(image_payload=image_payload, context=context)
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
                 body = await self._post_chat_completion(client, payload)
             content = body["choices"][0]["message"]["content"]
             normalized = self._normalize_message_content(content)
             return normalized or DEFAULT_NARRATION_TEXT
 
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(_run_once())
-
-        raise RuntimeError(
-            "narrate_frame_sync cannot be used from a running event loop; "
-            "await narrate_frame instead."
+        return run_async_from_sync(
+            _run_once,
+            running_loop_message=(
+                "narrate_frame_sync cannot be used from a running event loop; "
+                "await narrate_frame instead."
+            ),
         )
 
     async def wait_until_ready(
@@ -275,19 +238,15 @@ class VLMNarrator:
             ``True`` when endpoint readiness is confirmed; otherwise ``False``.
         """
 
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(
-                self.wait_until_ready(
-                    timeout_seconds=timeout_seconds,
-                    poll_interval_seconds=poll_interval_seconds,
-                )
-            )
-
-        raise RuntimeError(
-            "wait_until_ready_sync cannot be used from a running event loop; "
-            "await wait_until_ready instead."
+        return run_async_from_sync(
+            lambda: self.wait_until_ready(
+                timeout_seconds=timeout_seconds,
+                poll_interval_seconds=poll_interval_seconds,
+            ),
+            running_loop_message=(
+                "wait_until_ready_sync cannot be used from a running event loop; "
+                "await wait_until_ready instead."
+            ),
         )
 
     @staticmethod
@@ -312,6 +271,32 @@ class VLMNarrator:
             f"- Recent events: {context.event_summary}\n\n"
             "Narrate this moment."
         )
+
+    def _build_payload(
+        self,
+        *,
+        image_payload: dict[str, Any],
+        context: NarrationContext,
+    ) -> dict[str, Any]:
+        return {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": self._effective_system_prompt()},
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": self._build_user_message(context),
+                        },
+                        image_payload,
+                    ],
+                },
+            ],
+            "max_tokens": self._max_tokens,
+            "temperature": self._temperature,
+            "top_p": self._top_p,
+        }
 
     @staticmethod
     def _normalize_message_content(content: Any) -> str:

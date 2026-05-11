@@ -14,9 +14,23 @@ from typing import Any, AsyncIterator
 
 import numpy as np
 
+from docugym.async_utils import run_async_from_sync
+
 _SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[.!?])\s+")
 _ABBREVIATION_DOT = "<dot>"
-_SENTENCE_ABBREVIATIONS: tuple[str, ...] = ("Mr.", "Mrs.", "Ms.", "Dr.")
+_SENTENCE_ABBREVIATIONS: tuple[str, ...] = (
+    "Mr.",
+    "Mrs.",
+    "Ms.",
+    "Dr.",
+    "Prof.",
+    "Sr.",
+    "Jr.",
+    "Mt.",
+    "St.",
+    "e.g.",
+    "i.e.",
+)
 
 
 @dataclass(slots=True)
@@ -93,13 +107,12 @@ class KokoroTTS:
         async def _collect() -> list[SpeechSentence]:
             return [sentence async for sentence in self.speak(text)]
 
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(_collect())
-
-        raise RuntimeError(
-            "speak_sync cannot be used from a running event loop; await speak instead."
+        return run_async_from_sync(
+            _collect,
+            running_loop_message=(
+                "speak_sync cannot be used from a running event loop; "
+                "await speak instead."
+            ),
         )
 
     def _synthesize_sentences(self, text: str) -> list[SpeechSentence]:

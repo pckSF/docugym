@@ -39,38 +39,6 @@ if TYPE_CHECKING:
         docuwrapper,
     )
 
-__all__ = [
-    "__version__",
-    "AgentSettings",
-    "AppSettings",
-    "AudioChunkCallback",
-    "DEFAULT_SYSTEM_PROMPT",
-    "DisplaySettings",
-    "DocuWrapper",
-    "KokoroSettings",
-    "NarrationCallback",
-    "NarrationContext",
-    "NarrationSettings",
-    "PromptTuningSample",
-    "RecordingSettings",
-    "RunResult",
-    "RunSettings",
-    "StatusCallback",
-    "SubtitleCallback",
-    "TTSSettings",
-    "VLMNarrator",
-    "VLMSettings",
-    "XTTSSettings",
-    "docuwrapper",
-    "get_system_prompt",
-    "load_settings",
-    "reset_system_prompt",
-    "run_prompt_tuning",
-    "run_session",
-    "run_session_sync",
-    "set_system_prompt",
-]
-
 __version__ = "0.1.0"
 
 _EXPORTS: dict[str, tuple[str, str]] = {
@@ -103,6 +71,38 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "run_session_sync": ("docugym.runtime", "run_session_sync"),
     "set_system_prompt": ("docugym.prompts", "set_system_prompt"),
 }
+
+__all__ = [
+    "__version__",
+    "AgentSettings",
+    "AppSettings",
+    "AudioChunkCallback",
+    "DEFAULT_SYSTEM_PROMPT",
+    "DisplaySettings",
+    "DocuWrapper",
+    "KokoroSettings",
+    "NarrationCallback",
+    "NarrationContext",
+    "NarrationSettings",
+    "PromptTuningSample",
+    "RecordingSettings",
+    "RunResult",
+    "RunSettings",
+    "StatusCallback",
+    "SubtitleCallback",
+    "TTSSettings",
+    "VLMNarrator",
+    "VLMSettings",
+    "XTTSSettings",
+    "docuwrapper",
+    "get_system_prompt",
+    "load_settings",
+    "reset_system_prompt",
+    "run_prompt_tuning",
+    "run_session",
+    "run_session_sync",
+    "set_system_prompt",
+]
 
 
 def __getattr__(name: str) -> Any:

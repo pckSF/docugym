@@ -24,7 +24,7 @@ DEFAULT_SYSTEM_PROMPT = dedent(
         """
 ).strip()
 
-_system_prompt_state = [DEFAULT_SYSTEM_PROMPT]
+_active_system_prompt = DEFAULT_SYSTEM_PROMPT
 
 
 def get_system_prompt() -> str:
@@ -35,7 +35,7 @@ def get_system_prompt() -> str:
         override.
     """
 
-    return _system_prompt_state[0]
+    return _active_system_prompt
 
 
 def set_system_prompt(prompt: str) -> None:
@@ -52,10 +52,14 @@ def set_system_prompt(prompt: str) -> None:
     if not normalized:
         raise ValueError("system prompt must not be empty")
 
-    _system_prompt_state[0] = normalized
+    global _active_system_prompt  # noqa: PLW0603
+
+    _active_system_prompt = normalized
 
 
 def reset_system_prompt() -> None:
     """Restore the built-in narration system prompt."""
 
-    _system_prompt_state[0] = DEFAULT_SYSTEM_PROMPT
+    global _active_system_prompt  # noqa: PLW0603
+
+    _active_system_prompt = DEFAULT_SYSTEM_PROMPT

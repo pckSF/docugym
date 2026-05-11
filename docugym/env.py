@@ -14,6 +14,8 @@ from typing import Any, Literal, Protocol, Sequence
 import gymnasium as gym
 import numpy as np
 
+from docugym.image_io import save_frame_png
+
 POLICY_CACHE_DIR = Path.home() / ".cache" / "docugym" / "policies"
 DEFAULT_TRUSTED_SB3_REPO_PREFIXES: tuple[str, ...] = ("sb3/",)
 
@@ -143,7 +145,6 @@ def make_env(
     kwargs = dict(env_kwargs or {})
     env = gym.make(env_id, render_mode="rgb_array", **kwargs)
     env.action_space.seed(seed)
-    env.reset(seed=seed)
     return env
 
 
@@ -322,21 +323,6 @@ def load_sb3_policy(
     )
 
 
-def _save_frame_png(frame: np.ndarray, path: Path) -> None:
-    """Write one smoke-test frame to disk as a PNG image."""
-
-    try:
-        from PIL import Image
-    except ImportError as exc:  # pragma: no cover - depends on optional install
-        raise RuntimeError("Pillow is required to write smoketest PNG frames.") from exc
-
-    frame_to_save = frame
-    if frame_to_save.dtype != np.uint8:
-        frame_to_save = np.clip(frame_to_save, 0, 255).astype(np.uint8)
-
-    Image.fromarray(frame_to_save).save(path, format="PNG")
-
-
 def run_smoketest(
     env_id: str,
     seed: int,
@@ -428,7 +414,7 @@ def run_smoketest(
                 )
 
             frame_path = out_dir / f"frame-{step_idx:05d}.png"
-            _save_frame_png(frame=frame, path=frame_path)
+            save_frame_png(frame=frame, path=frame_path)
             frame_paths.append(frame_path)
 
             if terminated or truncated:

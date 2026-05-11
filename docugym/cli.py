@@ -11,7 +11,7 @@ from importlib import import_module
 import json
 import logging
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import TYPE_CHECKING, Any, Literal
 
 import typer
 import yaml
@@ -22,6 +22,7 @@ from docugym.config_files import (
     RUNTIME_CONFIG_PRESET_NAMES,
     resolved_config_path,
 )
+from docugym.env import _is_trusted_repo, _normalize_repo_prefixes
 from docugym.logging_config import configure_logging
 
 app = typer.Typer(
@@ -36,13 +37,15 @@ tune_app = typer.Typer(
 )
 app.add_typer(tune_app, name="tune")
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 run_display_smoketest: Any | None = None
 run_prompt_tuning: Any | None = None
 run_session_sync: Any | None = None
 run_smoketest: Any | None = None
 VLMNarrator: Any | None = None
-
-_DEFAULT_TRUSTED_SB3_REPO_PREFIXES: tuple[str, ...] = ("sb3/",)
 
 _KOKORO_BRITISH_VOICE_SAMPLES: tuple[tuple[str, str], ...] = (
     (
@@ -92,10 +95,10 @@ def _load_cli_dependency(name: str, module_name: str) -> Any:
     """
 
     dependency = globals()[name]
-    if dependency is None:
-        dependency = getattr(import_module(module_name), name)
-        globals()[name] = dependency
-    return dependency
+    if dependency is not None:
+        return dependency
+    return getattr(import_module(module_name), name)
+
 
 @dataclass(slots=True)
 class AppState:
@@ -148,30 +151,6 @@ def _parse_env_kwargs(value: str | None) -> dict[str, Any]:
         raise typer.BadParameter("--env-kwargs must decode to a JSON object")
 
     return dict(parsed)
-
-
-def _normalize_repo_prefixes(trusted_repo_prefixes: Sequence[str]) -> tuple[str, ...]:
-    """Return cleaned trusted repo prefixes, falling back to project defaults.
-
-    Args:
-        trusted_repo_prefixes: Candidate trusted repository prefixes from config.
-
-    Returns:
-        Tuple of normalized trusted repository prefixes.
-    """
-
-    normalized = tuple(
-        prefix.strip() for prefix in trusted_repo_prefixes if prefix.strip()
-    )
-    if normalized:
-        return normalized
-    return _DEFAULT_TRUSTED_SB3_REPO_PREFIXES
-
-
-def _is_trusted_repo(repo_id: str, trusted_prefixes: tuple[str, ...]) -> bool:
-    """Check whether a repo id starts with one of the configured prefixes."""
-
-    return any(repo_id.startswith(prefix) for prefix in trusted_prefixes)
 
 
 def _resolve_trusted_repo_enforcement(
@@ -343,7 +322,6 @@ def list_envs() -> None:
 
     typer.echo("Supported env presets:")
 
-    found = False
     for preset_name in RUNTIME_CONFIG_PRESET_NAMES:
         with resolved_config_path(preset_name) as preset_path:
             settings = _load_preset_settings(preset_path)
@@ -353,10 +331,6 @@ def list_envs() -> None:
             f"{preset_name}: env={settings.run.env_id} "
             f"agent={settings.agent.kind} policy={policy}"
         )
-        found = True
-
-    if not found:
-        typer.echo("- no presets found")
 
 
 @app.command("smoketest")

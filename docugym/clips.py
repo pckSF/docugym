@@ -9,25 +9,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import numpy as np
+from docugym.image_io import save_frame_png
+
+if TYPE_CHECKING:
+    import numpy as np
 
 _CLIP_COUNTER = count()
-
-
-def _save_frame_png(frame: np.ndarray, path: Path) -> None:
-    """Persist a frame as PNG, normalizing dtype for Pillow compatibility."""
-
-    try:
-        from PIL import Image
-    except ImportError as exc:  # pragma: no cover - depends on optional install
-        raise RuntimeError("Pillow is required to save clip snapshots.") from exc
-
-    frame_to_save = frame
-    if frame_to_save.dtype != np.uint8:
-        frame_to_save = np.clip(frame_to_save, 0, 255).astype(np.uint8)
-
-    Image.fromarray(frame_to_save[:, :, :3]).save(path, format="PNG")
 
 
 def save_clip_snapshot(
@@ -55,6 +44,6 @@ def save_clip_snapshot(
     frame_path = out_dir / f"{stem}.png"
     narration_path = out_dir / f"{stem}.txt"
 
-    _save_frame_png(frame=frame, path=frame_path)
+    save_frame_png(frame=frame, path=frame_path)
     narration_path.write_text(f"{narration.strip()}\n", encoding="utf-8")
     return frame_path, narration_path
