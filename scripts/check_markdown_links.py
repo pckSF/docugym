@@ -40,7 +40,11 @@ def _is_ignored_target(target: str) -> bool:
     return lowered.startswith(("http://", "https://", "mailto:", "tel:"))
 
 
-def _resolve_link_path(raw_target: str, source_file: Path, repo_root: Path) -> Path | None:
+def _resolve_link_path(
+    raw_target: str,
+    source_file: Path,
+    repo_root: Path,
+) -> Path | None:
     """Resolve one Markdown link target to a filesystem path.
 
     Anchor-only links (``#section``) resolve to the source file itself and are
@@ -72,7 +76,10 @@ def _check_file_links(path: Path, repo_root: Path) -> list[tuple[int, str, str]]
     """
 
     failures: list[tuple[int, str, str]] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(),
+        1,
+    ):
         for match in MARKDOWN_LINK_RE.finditer(line):
             raw_target = match.group(1).strip()
             if _is_ignored_target(raw_target):

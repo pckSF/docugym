@@ -38,4 +38,7 @@ jobs:
         uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
 
       - name: Run pip-audit against lock-derived requirements
-        run: uv tool run --from pip-audit==2.9.0 pip-audit -r requirements.txt --disable-pip
+        run: |
+          uv tool run --from pip-audit==2.9.0 pip-audit \
+            -r requirements.txt \
+            --disable-pip
