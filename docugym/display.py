@@ -6,6 +6,7 @@ subtitle rendering policy, and HUD status formatting remain behaviorally aligned
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any, Literal
 
 import numpy as np
@@ -90,6 +91,10 @@ class Display:
 
         self._window: pygame.Surface | None = None
         self._render_size: tuple[int, int] | None = None
+        self._frame_surface: pygame.Surface | None = None
+        self._scaled_frame_surface: pygame.Surface | None = None
+        self._frame_surface_size: tuple[int, int] | None = None
+        self._scaled_frame_surface_size: tuple[int, int] | None = None
         self._clock = pygame.time.Clock()
 
         pygame.init()
@@ -117,7 +122,6 @@ class Display:
 
         self._is_open = False
         pygame.display.quit()
-        pygame.quit()
 
     def set_subtitle(self, text: str) -> None:
         """Set the current subtitle text.
@@ -227,10 +231,10 @@ class Display:
             self._window = pygame.display.set_mode(window_size)
             self._render_size = window_size
 
-        transposed = np.transpose(normalized_frame, (1, 0, 2))
-        frame_surface = pygame.surfarray.make_surface(transposed)
-        if self._window_scale != 1:
-            frame_surface = pygame.transform.scale(frame_surface, frame_render_size)
+        frame_surface = self._render_frame_surface(
+            frame=normalized_frame,
+            frame_render_size=frame_render_size,
+        )
 
         self._window.fill((0, 0, 0))
         self._window.blit(frame_surface, (frame_offset_x, frame_offset_y))
@@ -431,6 +435,43 @@ class Display:
         card_y = self._window.get_height() - card_height - 12
         self._window.blit(card_surface, (card_x, card_y))
 
+    def _render_frame_surface(
+        self,
+        *,
+        frame: np.ndarray,
+        frame_render_size: tuple[int, int],
+    ) -> pygame.Surface:
+        frame_height, frame_width, _ = frame.shape
+        frame_surface_size = (frame_width, frame_height)
+
+        if (
+            self._frame_surface is None
+            or self._frame_surface_size != frame_surface_size
+        ):
+            self._frame_surface = pygame.Surface(frame_surface_size)
+            self._frame_surface_size = frame_surface_size
+
+        pygame.surfarray.blit_array(
+            self._frame_surface,
+            np.transpose(frame, (1, 0, 2)),
+        )
+
+        if self._window_scale == 1:
+            return self._frame_surface
+
+        if (
+            self._scaled_frame_surface is None
+            or self._scaled_frame_surface_size != frame_render_size
+        ):
+            self._scaled_frame_surface = pygame.Surface(frame_render_size)
+            self._scaled_frame_surface_size = frame_render_size
+
+        return pygame.transform.scale(
+            self._frame_surface,
+            frame_render_size,
+            self._scaled_frame_surface,
+        )
+
     @staticmethod
     def _normalize_frame(frame: np.ndarray) -> np.ndarray:
         if frame.ndim != 3:
@@ -452,6 +493,7 @@ class Display:
         return normalized
 
     @staticmethod
+    @lru_cache(maxsize=512)
     def _wrap_text(
         text: str, font: pygame.font.Font, max_width: int, max_lines: int
     ) -> list[str]:
@@ -461,17 +503,25 @@ class Display:
 
         lines: list[str] = []
         current_words: list[str] = []
+        current_width = 0
+        space_width = font.size(" ")[0]
 
         for word in words:
-            candidate_words = [*current_words, word]
-            candidate_text = " ".join(candidate_words)
+            word_width = font.size(word)[0]
+            candidate_width = (
+                word_width
+                if not current_words
+                else current_width + space_width + word_width
+            )
 
-            if not current_words or font.size(candidate_text)[0] <= max_width:
-                current_words = candidate_words
+            if not current_words or candidate_width <= max_width:
+                current_words.append(word)
+                current_width = candidate_width
                 continue
 
             lines.append(" ".join(current_words))
             current_words = [word]
+            current_width = word_width
 
             if len(lines) >= max_lines:
                 return lines

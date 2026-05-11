@@ -22,7 +22,6 @@ from typing import (
     Literal,
     Protocol,
     Sequence,
-    runtime_checkable,
 )
 
 import numpy as np
@@ -54,6 +53,7 @@ from docugym.queue_utils import (
     drain_latest_async,
     push_drop_oldest_async,
 )
+from docugym.async_utils import run_async_from_sync
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,6 @@ class _NarrationCandidate:
     timestamp: float
 
 
-@runtime_checkable
 class AsyncNarratorClient(Protocol):
     """Async narrator contract consumed by the runtime pipeline.
 
@@ -145,7 +144,6 @@ class AsyncNarratorClient(Protocol):
         """
 
 
-@runtime_checkable
 class AsyncSpeakerClient(Protocol):
     """Async speaker contract for sentence-level speech synthesis.
 
@@ -164,7 +162,6 @@ class AsyncSpeakerClient(Protocol):
         """
 
 
-@runtime_checkable
 class NarratorClient(Protocol):
     """Structural narrator type for synchronous narration clients.
 
@@ -195,7 +192,6 @@ class SpeechSentence(Protocol):
     chunks: list[np.ndarray]
 
 
-@runtime_checkable
 class SpeakerClient(Protocol):
     """Synchronous speaker contract used by non-async runtime paths.
 
@@ -213,7 +209,6 @@ class SpeakerClient(Protocol):
         """
 
 
-@runtime_checkable
 class AudioOutputClient(Protocol):
     """Audio output sink contract used by runtime playback integration.
 
@@ -240,7 +235,6 @@ class AudioOutputClient(Protocol):
         """
 
 
-@runtime_checkable
 class SessionRecorderClient(Protocol):
     """Recorder sink contract used by runtime recording integration.
 
@@ -340,12 +334,14 @@ async def _narrate_async(
         TypeError: If ``narrator`` does not implement either expected protocol.
     """
 
-    if isinstance(narrator, AsyncNarratorClient):
-        return await narrator.narrate_frame(frame=frame, context=context)
+    narrate_frame = getattr(narrator, "narrate_frame", None)
+    if callable(narrate_frame):
+        return await narrate_frame(frame=frame, context=context)
 
-    if isinstance(narrator, NarratorClient):
+    narrate_frame_sync = getattr(narrator, "narrate_frame_sync", None)
+    if callable(narrate_frame_sync):
         return await asyncio.to_thread(
-            narrator.narrate_frame_sync,
+            narrate_frame_sync,
             frame,
             context,
         )
@@ -366,13 +362,15 @@ async def _speak_async(
         TypeError: If ``speaker`` does not implement either expected protocol.
     """
 
-    if isinstance(speaker, AsyncSpeakerClient):
-        async for sentence in speaker.speak(text):
+    speak = getattr(speaker, "speak", None)
+    if callable(speak):
+        async for sentence in speak(text):
             yield sentence
         return
 
-    if isinstance(speaker, SpeakerClient):
-        sentences = await asyncio.to_thread(speaker.speak_sync, text)
+    speak_sync = getattr(speaker, "speak_sync", None)
+    if callable(speak_sync):
+        sentences = await asyncio.to_thread(speak_sync, text)
         for sentence in sentences:
             yield sentence
         return
@@ -1033,23 +1031,16 @@ async def run_session(
 
             await asyncio.sleep(0)
 
-    tasks = [
-        asyncio.create_task(env_task(), name="env_task"),
-        asyncio.create_task(keyframe_task(), name="keyframe_task"),
-        asyncio.create_task(narrator_task(), name="narrator_task"),
-        asyncio.create_task(tts_task(), name="tts_task"),
-        asyncio.create_task(display_task(), name="display_task"),
-    ]
-
     try:
-        await asyncio.gather(*tasks)
+        async with asyncio.TaskGroup() as task_group:
+            task_group.create_task(env_task(), name="env_task")
+            task_group.create_task(keyframe_task(), name="keyframe_task")
+            task_group.create_task(narrator_task(), name="narrator_task")
+            task_group.create_task(tts_task(), name="tts_task")
+            task_group.create_task(display_task(), name="display_task")
     finally:
         stop_event.set()
         pause_event.set()
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
         end_ts = perf_counter()
         if tts_active and active_audio_output is not None:
             active_audio_output.stop()
@@ -1097,12 +1088,10 @@ def run_session_sync(**kwargs: Any) -> RunResult:
         RuntimeError: If called while an event loop is already running.
     """
 
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(run_session(**kwargs))
-
-    raise RuntimeError(
-        "run_session_sync cannot run from an active event loop; "
-        "await run_session instead."
+    return run_async_from_sync(
+        lambda: run_session(**kwargs),
+        running_loop_message=(
+            "run_session_sync cannot run from an active event loop; "
+            "await run_session instead."
+        ),
     )
