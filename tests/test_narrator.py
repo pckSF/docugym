@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from docugym.narrator import NarrationContext, VLMNarrator
+from docugym.narration_defaults import DEFAULT_NARRATION_TEXT
 from docugym.prompts import get_system_prompt, reset_system_prompt, set_system_prompt
 
 
@@ -255,3 +256,81 @@ def test_wait_until_ready_sync_polls_until_success(monkeypatch) -> None:
     get_urls = cast("list[str]", capture["get_urls"])
     assert len(get_urls) >= 3
     assert all(url == "http://localhost:8000/v1/models" for url in get_urls)
+
+
+class _FixedResponseClient:
+    """Async client stub returning a fixed (possibly malformed) JSON body."""
+
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+        self.is_closed = False
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:  # type: ignore[no-untyped-def]
+        del exc_type, exc, tb
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        self.is_closed = True
+
+    async def post(self, url: str, json: dict[str, object]) -> _FakeResponse:
+        del url, json
+        return _FakeResponse(self._payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"choices": []},
+        {"choices": [{}]},
+        {"choices": [{"message": {}}]},
+    ],
+)
+def test_narrate_frame_sync_returns_fallback_on_malformed_response(
+    monkeypatch, payload: dict[str, object]
+) -> None:
+    def fake_async_client(*_args: object, **_kwargs: object) -> _FixedResponseClient:
+        return _FixedResponseClient(payload)
+
+    monkeypatch.setattr("docugym.narrator.httpx.AsyncClient", fake_async_client)
+
+    narrator = VLMNarrator(
+        base_url="http://localhost:8000/v1",
+        model="model",
+        max_tokens=80,
+        temperature=0.8,
+        top_p=0.9,
+    )
+
+    text = narrator.narrate_frame_sync(
+        frame=np.zeros((8, 8, 3), dtype=np.uint8),
+        context=NarrationContext(env_human_name="Scene"),
+    )
+
+    assert text == DEFAULT_NARRATION_TEXT
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_tokens": 0},
+        {"temperature": -0.1},
+        {"top_p": 0.0},
+        {"top_p": 1.5},
+    ],
+)
+def test_narrator_rejects_invalid_sampling_params(kwargs: dict[str, Any]) -> None:
+    base: dict[str, Any] = {
+        "base_url": "http://localhost:8000/v1",
+        "model": "model",
+        "max_tokens": 80,
+        "temperature": 0.8,
+        "top_p": 0.9,
+    }
+    base.update(kwargs)
+
+    with pytest.raises(ValueError):
+        VLMNarrator(**base)

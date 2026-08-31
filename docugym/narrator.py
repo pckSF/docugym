@@ -91,6 +91,12 @@ class VLMNarrator:
         parsed_base_url = httpx.URL(base_url)
         if parsed_base_url.scheme not in {"http", "https"} or not parsed_base_url.host:
             raise ValueError("base_url must be an absolute http(s) URL")
+        if max_tokens <= 0:
+            raise ValueError("max_tokens must be a positive integer")
+        if temperature < 0:
+            raise ValueError("temperature must be non-negative")
+        if not 0 < top_p <= 1:
+            raise ValueError("top_p must be in the interval (0, 1]")
 
         self._base_url = base_url.rstrip("/")
         self._model = model
@@ -129,7 +135,7 @@ class VLMNarrator:
         client = await self._get_client()
         body = await self._post_chat_completion(client, payload)
 
-        content = body["choices"][0]["message"]["content"]
+        content = self._extract_content(body)
         normalized = self._normalize_message_content(content)
         return normalized or DEFAULT_NARRATION_TEXT
 
@@ -155,7 +161,7 @@ class VLMNarrator:
             payload = self._build_payload(image_payload=image_payload, context=context)
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
                 body = await self._post_chat_completion(client, payload)
-            content = body["choices"][0]["message"]["content"]
+            content = self._extract_content(body)
             normalized = self._normalize_message_content(content)
             return normalized or DEFAULT_NARRATION_TEXT
 
@@ -297,6 +303,24 @@ class VLMNarrator:
             "temperature": self._temperature,
             "top_p": self._top_p,
         }
+
+    @staticmethod
+    def _extract_content(body: dict[str, Any]) -> Any:
+        """Pull message content from an OpenAI-style body, tolerating bad shapes."""
+
+        choices = body.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return ""
+
+        first = choices[0]
+        if not isinstance(first, dict):
+            return ""
+
+        message = first.get("message")
+        if not isinstance(message, dict):
+            return ""
+
+        return message.get("content", "")
 
     @staticmethod
     def _normalize_message_content(content: Any) -> str:
